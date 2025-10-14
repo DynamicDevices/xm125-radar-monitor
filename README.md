@@ -1,6 +1,6 @@
 # XM125 Radar Monitor
 
-A Rust application for reading distance measurements from the Acconeer XM125 radar module via I2C communication.
+A Rust application for reading distance measurements and presence detection from the Acconeer XM125 radar module via I2C communication.
 
 ## Features
 
