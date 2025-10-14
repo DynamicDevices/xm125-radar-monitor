@@ -193,7 +193,7 @@ Typical XM125 I2C connections:
 
 ## License
 
-Commercial License - see LICENSE file for details.
+This project is licensed under the GNU General Public License v3.0 or later - see the [LICENSE](LICENSE) file for details.
 
 ## Copyright
 

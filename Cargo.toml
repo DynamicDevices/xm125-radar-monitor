@@ -2,7 +2,7 @@
 name = "xm125-radar-monitor"
 version = "0.1.0"
 edition = "2021"
-license = "Commercial"
+license = "GPL-3.0-or-later"
 description = "Embedded Rust application for XM125 radar module monitoring and distance detection"
 homepage = "https://github.com/DynamicDevices/xm125-radar-monitor"
 repository = "https://github.com/DynamicDevices/xm125-radar-monitor"

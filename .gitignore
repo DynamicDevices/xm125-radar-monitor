@@ -227,3 +227,11 @@ coverage/
 # Benchmark results
 criterion/
 benchmarks/
+
+# Reference documents (potentially confidential)
+references/
+**/references/
+docs/references/
+*.pdf
+XM125*
+A121*
