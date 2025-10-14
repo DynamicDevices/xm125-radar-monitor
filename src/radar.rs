@@ -72,35 +72,34 @@ impl XM125Radar {
         }
     }
 
-    pub async fn connect(&mut self) -> Result<()> {
+    pub fn connect(&mut self) -> Result<()> {
         info!("Connecting to XM125 radar module...");
 
         // Check if device is responsive
-        match self.get_status_raw().await {
+        match self.get_status_raw() {
             Ok(_) => {
                 self.is_connected = true;
                 info!("Successfully connected to XM125");
                 Ok(())
             }
             Err(e) => {
-                warn!("Failed to connect to XM125: {}", e);
+                warn!("Failed to connect to XM125: {e}");
                 Err(RadarError::NotConnected)
             }
         }
     }
 
-    pub async fn disconnect(&mut self) -> Result<()> {
+    pub fn disconnect(&mut self) {
         if self.is_connected {
             // Disable detector before disconnecting
-            let _ = self.send_command(CMD_DISABLE_DETECTOR).await;
+            let _ = self.send_command(CMD_DISABLE_DETECTOR);
             self.is_connected = false;
             info!("Disconnected from XM125");
         }
-        Ok(())
     }
 
-    pub async fn get_status(&mut self) -> Result<String> {
-        let status = self.get_status_raw().await?;
+    pub fn get_status(&mut self) -> Result<String> {
+        let status = self.get_status_raw()?;
 
         let mut status_parts = Vec::new();
 
@@ -128,7 +127,7 @@ impl XM125Radar {
         ))
     }
 
-    pub async fn get_info(&mut self) -> Result<String> {
+    pub fn get_info(&mut self) -> Result<String> {
         // Read sensor information from XM125
         let info_data = self.i2c.read_register(REG_SENSOR_INFO, 16)?;
 
@@ -151,12 +150,12 @@ impl XM125Radar {
         info!("Starting XM125 calibration...");
 
         // Send calibration command
-        self.send_command(CMD_CALIBRATE_DETECTOR).await?;
+        self.send_command(CMD_CALIBRATE_DETECTOR)?;
 
         // Wait for calibration to complete
         let start_time = Instant::now();
         loop {
-            let status = self.get_status_raw().await?;
+            let status = self.get_status_raw()?;
 
             if status & STATUS_CALIBRATION_DONE != 0 {
                 self.is_calibrated = true;
@@ -194,12 +193,12 @@ impl XM125Radar {
         }
 
         // Send measurement command
-        self.send_command(CMD_MEASURE_DISTANCE).await?;
+        self.send_command(CMD_MEASURE_DISTANCE)?;
 
         // Wait for measurement to be ready
         let start_time = Instant::now();
         loop {
-            let status = self.get_status_raw().await?;
+            let status = self.get_status_raw()?;
 
             if status & STATUS_MEASUREMENT_READY != 0 {
                 break;
@@ -219,10 +218,10 @@ impl XM125Radar {
         }
 
         // Read measurement result
-        self.read_distance_result().await
+        self.read_distance_result()
     }
 
-    async fn get_status_raw(&mut self) -> Result<u32> {
+    fn get_status_raw(&mut self) -> Result<u32> {
         let status_data = self.i2c.read_register(REG_MAIN_STATUS, 4)?;
         Ok(u32::from_le_bytes([
             status_data[0],
@@ -232,14 +231,14 @@ impl XM125Radar {
         ]))
     }
 
-    async fn send_command(&mut self, command: u32) -> Result<()> {
-        debug!("Sending command: 0x{:08X}", command);
+    fn send_command(&mut self, command: u32) -> Result<()> {
+        debug!("Sending command: 0x{command:08X}");
         let cmd_bytes = command.to_le_bytes();
         self.i2c.write_register(REG_MAIN_COMMAND, &cmd_bytes)?;
         Ok(())
     }
 
-    async fn read_distance_result(&mut self) -> Result<DistanceMeasurement> {
+    fn read_distance_result(&mut self) -> Result<DistanceMeasurement> {
         // Read distance result (assuming 16 bytes: distance, strength, temp, etc.)
         let result_data = self.i2c.read_register(REG_DISTANCE_RESULT, 16)?;
 
@@ -258,7 +257,9 @@ impl XM125Radar {
         ]);
         let temperature = i16::from_le_bytes([result_data[8], result_data[9]]);
 
+        #[allow(clippy::cast_precision_loss)] // Converting mm to meters, precision loss acceptable
         let distance = distance_mm as f32 / 1000.0; // Convert mm to meters
+        #[allow(clippy::cast_precision_loss)] // Converting to dB, precision loss acceptable
         let strength = (strength_raw as f32) / 100.0; // Convert to dB (assuming 0.01 dB resolution)
 
         Ok(DistanceMeasurement {

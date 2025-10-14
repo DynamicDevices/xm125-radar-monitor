@@ -179,12 +179,17 @@ Typical XM125 I2C connections:
 - **SCL**: I2C clock line
 - **Address**: Configure I2C address (default 0x52)
 
+## Documentation
+
+- **[Development Guide](docs/DEVELOPMENT.md)** - Setup, Git hooks, and development workflow
+- **[XM125 References](docs/references/)** - Hardware documentation and SDK references
+
 ## References
 
-- [Acconeer XM125 Documentation](./references/doc/)
-- [XM125 Datasheet](./references/XM125-datasheet.pdf)
-- [A121 Distance Detector User Guide](./references/doc/A121%20Distance%20Detector%20User%20Guide.pdf)
-- [XM125 Software User Guide](./references/doc/XM125%20Software%20User%20Guide.pdf)
+- [Acconeer XM125 Documentation](./docs/references/doc/)
+- [XM125 Datasheet](./docs/references/XM125-datasheet.pdf)
+- [A121 Distance Detector User Guide](./docs/references/doc/A121%20Distance%20Detector%20User%20Guide.pdf)
+- [XM125 Software User Guide](./docs/references/doc/XM125%20Software%20User%20Guide.pdf)
 
 ## License
 

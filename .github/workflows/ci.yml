@@ -60,7 +60,7 @@ jobs:
       run: cargo fmt --all -- --check
 
     - name: Run Clippy lints
-      run: cargo clippy --all-targets --all-features -- -D warnings -A dead_code
+      run: cargo clippy --all-targets --all-features -- -D warnings -D clippy::all -D clippy::pedantic -A dead_code -A clippy::module_name_repetitions -A clippy::similar_names
 
     - name: Run tests
       run: cargo test --verbose --all-features

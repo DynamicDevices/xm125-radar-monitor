@@ -29,37 +29,34 @@ async fn main() {
         .init();
 
     if !cli.quiet {
-        println!("{} v{}", APP_NAME, VERSION);
+        println!("{APP_NAME} v{VERSION}");
         println!("Copyright (c) 2025 Dynamic Devices Ltd. All rights reserved.");
         println!("XM125 Radar Module Monitor");
         println!();
     }
 
     if let Err(e) = run(cli).await {
-        error!("Command failed: {}", e);
-        eprintln!("Error: {}", e);
+        error!("Command failed: {e}");
+        eprintln!("Error: {e}");
         process::exit(1);
     }
 }
 
 async fn run(cli: Cli) -> Result<(), RadarError> {
-    debug!("Starting {} v{}", APP_NAME, VERSION);
+    debug!("Starting {APP_NAME} v{VERSION}");
 
     // Create I2C connection to XM125
     let i2c_device = i2c::I2cDevice::new(&cli.i2c_device, cli.i2c_address)?;
     let mut radar = radar::XM125Radar::new(i2c_device);
 
     // Execute command
-    match &cli.command {
-        Some(cmd) => {
-            debug!("Executing command: {:?}", cmd);
-            execute_command(cmd.clone(), &mut radar, &cli).await?;
-            Ok(())
-        }
-        None => {
-            println!("No command provided. Use --help for usage information.");
-            Ok(())
-        }
+    if let Some(cmd) = &cli.command {
+        debug!("Executing command: {cmd:?}");
+        execute_command(cmd.clone(), &mut radar, &cli).await?;
+        Ok(())
+    } else {
+        println!("No command provided. Use --help for usage information.");
+        Ok(())
     }
 }
 
@@ -72,15 +69,15 @@ async fn execute_command(
 
     match command {
         Commands::Status => {
-            let status = radar.get_status().await?;
+            let status = radar.get_status()?;
             output_response(cli, "status", &status, "📊", "Radar Status")?;
         }
         Commands::Connect => {
-            radar.connect().await?;
+            radar.connect()?;
             output_response(cli, "connect", "Connected successfully", "🔗", "Connection")?;
         }
         Commands::Disconnect => {
-            radar.disconnect().await?;
+            radar.disconnect();
             output_response(
                 cli,
                 "disconnect",
@@ -90,7 +87,7 @@ async fn execute_command(
             )?;
         }
         Commands::Info => {
-            let info = radar.get_info().await?;
+            let info = radar.get_info()?;
             output_response(cli, "info", &info, "ℹ️", "Device Information")?;
         }
         Commands::Measure => {
@@ -194,8 +191,8 @@ fn output_response(
 
     match cli.format {
         cli::OutputFormat::Human => {
-            println!("{} {}:", emoji, title);
-            println!("{}", response);
+            println!("{emoji} {title}:");
+            println!("{response}");
         }
         cli::OutputFormat::Json => {
             let json_response = serde_json::json!({
@@ -212,7 +209,7 @@ fn output_response(
                 "{},{},success,\"{}\"",
                 chrono::Utc::now().to_rfc3339(),
                 command,
-                response.replace("\"", "\"\"")
+                response.replace('"', "\"\"")
             );
         }
     }
