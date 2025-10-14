@@ -1,14 +1,41 @@
 use clap::{Parser, Subcommand, ValueEnum};
 
+/// Parse I2C address from string, supporting both decimal and hex formats
+fn parse_i2c_address(s: &str) -> Result<u16, String> {
+    if let Some(hex_str) = s.strip_prefix("0x") {
+        u16::from_str_radix(hex_str, 16).map_err(|_| format!("Invalid hex I2C address: {s}"))
+    } else {
+        s.parse::<u16>()
+            .map_err(|_| format!("Invalid I2C address: {s}"))
+    }
+}
+
+impl Cli {
+    /// Get the I2C device path, using bus number if device path not specified
+    pub fn get_i2c_device_path(&self) -> String {
+        if let Some(device) = &self.i2c_device {
+            device.clone()
+        } else if let Some(bus) = self.i2c_bus {
+            format!("/dev/i2c-{bus}")
+        } else {
+            "/dev/i2c-1".to_string() // Default fallback
+        }
+    }
+}
+
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 pub struct Cli {
-    /// I2C device path (e.g., /dev/i2c-1)
-    #[arg(short = 'd', long, default_value = "/dev/i2c-1")]
-    pub i2c_device: String,
+    /// I2C bus number (will be used as /dev/i2c-N if --i2c-device not specified)
+    #[arg(short = 'b', long)]
+    pub i2c_bus: Option<u8>,
 
-    /// I2C address of the XM125 module (7-bit address)
-    #[arg(short = 'a', long, default_value_t = 0x52)]
+    /// I2C device path (e.g., /dev/i2c-1)
+    #[arg(short = 'd', long)]
+    pub i2c_device: Option<String>,
+
+    /// I2C address of the XM125 module (7-bit address, hex format supported)
+    #[arg(short = 'a', long, value_parser = parse_i2c_address, default_value = "0x52")]
     pub i2c_address: u16,
 
     /// Command timeout in seconds

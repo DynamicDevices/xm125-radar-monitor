@@ -64,7 +64,12 @@ async fn run(cli: Cli) -> Result<(), RadarError> {
     debug!("Starting {APP_NAME} v{VERSION}");
 
     // Create I2C connection to XM125
-    let i2c_device = i2c::I2cDevice::new(&cli.i2c_device, cli.i2c_address)?;
+    let i2c_device_path = cli.get_i2c_device_path();
+    debug!(
+        "Using I2C device: {} at address 0x{:02X}",
+        i2c_device_path, cli.i2c_address
+    );
+    let i2c_device = i2c::I2cDevice::new(&i2c_device_path, cli.i2c_address)?;
     let mut radar = radar::XM125Radar::new(i2c_device);
 
     // Configure radar based on CLI options
