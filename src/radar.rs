@@ -256,7 +256,7 @@ impl XM125Radar {
         }
 
         // Check if calibration is needed (every 5 minutes or if not calibrated)
-        #[allow(clippy::unnecessary_map_or)] // is_none_or is unstable, use map_or for compatibility
+        #[allow(clippy::unnecessary_map_or)] // is_none_or is unstable in older Rust versions
         if !self.is_calibrated
             || self
                 .last_calibration
