@@ -4,30 +4,38 @@ use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
-// XM125 I2C Register Addresses (based on Acconeer documentation)
-const REG_MAIN_COMMAND: u16 = 0x0000;
-const REG_MAIN_STATUS: u16 = 0x0002;
-const REG_DISTANCE_RESULT: u16 = 0x0100;
-const REG_DISTANCE_CONFIG: u16 = 0x0200;
-const REG_SENSOR_INFO: u16 = 0x0300;
+// XM125 I2C Register Addresses (from distance_reg_protocol.h)
+const REG_VERSION: u16 = 0; // DISTANCE_REG_VERSION_ADDRESS
+const REG_PROTOCOL_STATUS: u16 = 1; // DISTANCE_REG_PROTOCOL_STATUS_ADDRESS
+const REG_MEASURE_COUNTER: u16 = 2; // DISTANCE_REG_MEASURE_COUNTER_ADDRESS
+const REG_DETECTOR_STATUS: u16 = 3; // DISTANCE_REG_DETECTOR_STATUS_ADDRESS
+const REG_DISTANCE_RESULT: u16 = 16; // DISTANCE_REG_DISTANCE_RESULT_ADDRESS
+const REG_PEAK0_DISTANCE: u16 = 17; // DISTANCE_REG_PEAK0_DISTANCE_ADDRESS
+const REG_PEAK0_STRENGTH: u16 = 27; // DISTANCE_REG_PEAK0_STRENGTH_ADDRESS
+const REG_START_CONFIG: u16 = 64; // DISTANCE_REG_START_ADDRESS
+const REG_END_CONFIG: u16 = 65; // DISTANCE_REG_END_ADDRESS
+const REG_COMMAND: u16 = 256; // DISTANCE_REG_COMMAND_ADDRESS
+const REG_APPLICATION_ID: u16 = 65535; // DISTANCE_REG_APPLICATION_ID_ADDRESS
 
-// Presence Detection Registers
-const REG_PRESENCE_RESULT: u16 = 0x0400;
-const REG_PRESENCE_CONFIG: u16 = 0x0500;
-const REG_PRESENCE_DISTANCE: u16 = 0x0401;
-const REG_INTRA_PRESENCE_SCORE: u16 = 0x0402;
-const REG_INTER_PRESENCE_SCORE: u16 = 0x0403;
+// Command codes for XM125 (from distance_reg_protocol.h)
+const CMD_APPLY_CONFIG_AND_CALIBRATE: u32 = 1; // DISTANCE_REG_COMMAND_ENUM_APPLY_CONFIG_AND_CALIBRATE
+const CMD_MEASURE_DISTANCE: u32 = 2; // DISTANCE_REG_COMMAND_ENUM_MEASURE_DISTANCE
+const CMD_APPLY_CONFIGURATION: u32 = 3; // DISTANCE_REG_COMMAND_ENUM_APPLY_CONFIGURATION
+const CMD_CALIBRATE: u32 = 4; // DISTANCE_REG_COMMAND_ENUM_CALIBRATE
+const CMD_RECALIBRATE: u32 = 5; // DISTANCE_REG_COMMAND_ENUM_RECALIBRATE
+const CMD_RESET_MODULE: u32 = 0x5253_5421; // DISTANCE_REG_COMMAND_ENUM_RESET_MODULE
 
-// Command codes for XM125
-const CMD_ENABLE_DETECTOR: u32 = 0x01;
-const CMD_DISABLE_DETECTOR: u32 = 0x02;
-const CMD_CALIBRATE_DETECTOR: u32 = 0x03;
-const CMD_MEASURE_DISTANCE: u32 = 0x04;
-const CMD_GET_DETECTOR_STATUS: u32 = 0x05;
-const CMD_ENABLE_PRESENCE_DETECTOR: u32 = 0x06;
-const CMD_MEASURE_PRESENCE: u32 = 0x07;
-const CMD_ENABLE_CONTINUOUS_MODE: u32 = 0x08;
-const CMD_DISABLE_CONTINUOUS_MODE: u32 = 0x09;
+// Legacy/placeholder commands for compatibility (not in actual XM125 protocol)
+const CMD_ENABLE_DETECTOR: u32 = CMD_APPLY_CONFIGURATION;
+const CMD_DISABLE_DETECTOR: u32 = CMD_RESET_MODULE;
+const CMD_ENABLE_PRESENCE_DETECTOR: u32 = CMD_APPLY_CONFIGURATION;
+const CMD_MEASURE_PRESENCE: u32 = CMD_MEASURE_DISTANCE; // Placeholder - presence needs different protocol
+const CMD_ENABLE_CONTINUOUS_MODE: u32 = CMD_APPLY_CONFIGURATION;
+const CMD_DISABLE_CONTINUOUS_MODE: u32 = CMD_RESET_MODULE;
+
+// Placeholder register for compatibility
+const REG_SENSOR_INFO: u16 = REG_VERSION; // Use version register for device info
+const REG_PRESENCE_RESULT: u16 = REG_DISTANCE_RESULT; // Placeholder - needs presence protocol
 
 // Status flags
 const STATUS_DETECTOR_READY: u32 = 0x01;
@@ -222,7 +230,7 @@ impl XM125Radar {
         info!("Starting XM125 calibration...");
 
         // Send calibration command
-        self.send_command(CMD_CALIBRATE_DETECTOR)?;
+        self.send_command(CMD_APPLY_CONFIG_AND_CALIBRATE)?;
 
         // Wait for calibration to complete
         let start_time = Instant::now();
@@ -296,7 +304,7 @@ impl XM125Radar {
     }
 
     fn get_status_raw(&mut self) -> Result<u32> {
-        let status_data = self.i2c.read_register(REG_MAIN_STATUS, 4)?;
+        let status_data = self.i2c.read_register(REG_DETECTOR_STATUS, 4)?;
         Ok(u32::from_le_bytes([
             status_data[0],
             status_data[1],
@@ -308,7 +316,7 @@ impl XM125Radar {
     fn send_command(&mut self, command: u32) -> Result<()> {
         debug!("Sending command: 0x{command:08X}");
         let cmd_bytes = command.to_le_bytes();
-        self.i2c.write_register(REG_MAIN_COMMAND, &cmd_bytes)?;
+        self.i2c.write_register(REG_COMMAND, &cmd_bytes)?;
         Ok(())
     }
 
