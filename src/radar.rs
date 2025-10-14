@@ -188,7 +188,7 @@ impl XM125Radar {
         if !self.is_calibrated
             || self
                 .last_calibration
-                .map_or(true, |t| t.elapsed() > Duration::from_secs(300))
+                .is_none_or(|t| t.elapsed() > Duration::from_secs(300))
         {
             self.calibrate().await?;
         }
