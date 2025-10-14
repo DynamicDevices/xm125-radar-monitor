@@ -36,3 +36,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CLI interface with clap
 - Cross-compilation setup for ARM64
 - Project documentation and README
+- Commercial licensing and Dynamic Devices Ltd copyright

@@ -30,7 +30,7 @@ async fn main() {
 
     if !cli.quiet {
         println!("{} v{}", APP_NAME, VERSION);
-        println!("Copyright (c) 2025 Dynamic Devices Ltd");
+        println!("Copyright (c) 2025 Dynamic Devices Ltd. All rights reserved.");
         println!("XM125 Radar Module Monitor");
         println!();
     }

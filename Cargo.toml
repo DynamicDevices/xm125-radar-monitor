@@ -2,7 +2,7 @@
 name = "xm125-radar-monitor"
 version = "0.1.0"
 edition = "2021"
-license = "MIT"
+license = "Commercial"
 description = "Embedded Rust application for XM125 radar module monitoring and distance detection"
 homepage = "https://github.com/sentai/xm125-radar-monitor"
 repository = "https://github.com/sentai/xm125-radar-monitor"
@@ -10,12 +10,12 @@ documentation = "https://github.com/sentai/xm125-radar-monitor/blob/main/README.
 readme = "README.md"
 keywords = ["embedded", "radar", "xm125", "distance", "sensor"]
 categories = ["command-line-utilities", "embedded", "hardware-support"]
-authors = ["Alex Lennon <alex@dynamicdevices.co.uk>"]
+authors = ["Alex J Lennon <ajlennon@dynamicdevices.co.uk>"]
 publish = false
 
 [package.metadata]
-maintainer = "Alex Lennon <alex@dynamicdevices.co.uk>"
-contact = "alex@dynamicdevices.co.uk"
+maintainer = "Alex J Lennon <ajlennon@dynamicdevices.co.uk>"
+contact = "info@dynamicdevices.co.uk"
 company = "Dynamic Devices Ltd"
 copyright = "Copyright (c) 2025 Dynamic Devices Ltd"
 

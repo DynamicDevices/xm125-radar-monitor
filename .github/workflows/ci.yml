@@ -361,6 +361,10 @@ jobs:
         - **Module**: Acconeer XM125 radar sensor
         - **Interface**: I2C (/dev/i2c-1 at address 0x52)
         - **Supported Features**: Distance measurement, presence detection, calibration
+        
+        ## License
+        Commercial License - Copyright (c) 2025 Dynamic Devices Ltd
+        Contact: info@dynamicdevices.co.uk
         EOF
 
     - name: Create GitHub Release

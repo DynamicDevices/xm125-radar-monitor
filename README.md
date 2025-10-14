@@ -188,8 +188,15 @@ Typical XM125 I2C connections:
 
 ## License
 
-MIT License - see LICENSE file for details.
+Commercial License - see LICENSE file for details.
 
 ## Copyright
 
-Copyright (c) 2025 Dynamic Devices Ltd
+Copyright (c) 2025 Dynamic Devices Ltd. All rights reserved.
+
+## Contact
+
+For licensing, support, or commercial inquiries:
+- **Email**: info@dynamicdevices.co.uk
+- **Author**: Alex J Lennon <ajlennon@dynamicdevices.co.uk>
+- **Company**: Dynamic Devices Ltd
