@@ -220,7 +220,7 @@ This project is licensed under the GNU General Public License v3.0 or later - se
 
 Copyright (c) 2025 Dynamic Devices Ltd. All rights reserved.
 
-## Contact
+## Contact & Support
 
 For licensing, support, or commercial inquiries:
 - **Email**: info@dynamicdevices.co.uk
