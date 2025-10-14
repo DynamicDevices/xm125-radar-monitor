@@ -1,0 +1,72 @@
+# Pre-commit hooks configuration for XM125 Radar Monitor
+# See https://pre-commit.com for more information
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+
+  - repo: https://github.com/doublify/pre-commit-rust
+    rev: v1.0
+    hooks:
+      # Format Rust code
+      - id: fmt
+        name: Rust format check
+        description: Run cargo fmt to check Rust code formatting
+        entry: cargo fmt --all --
+        language: system
+        files: \.rs$
+        pass_filenames: false
+        args: ['--check']
+      
+      # Run Clippy lints
+      - id: clippy
+        name: Rust clippy check
+        description: Run cargo clippy for Rust linting
+        entry: cargo clippy --all-targets --all-features --
+        language: system
+        files: \.rs$
+        pass_filenames: false
+        args: ['-D', 'warnings', '-A', 'dead_code']
+      
+      # Run tests
+      - id: cargo-check
+        name: Rust cargo check
+        description: Run cargo check for basic compilation
+        entry: cargo check --all-targets --all-features
+        language: system
+        files: \.rs$
+        pass_filenames: false
+
+  # Additional Rust-specific checks
+  - repo: local
+    hooks:
+      - id: cargo-test
+        name: Rust tests
+        description: Run cargo test
+        entry: cargo test --all-features
+        language: system
+        files: \.rs$
+        pass_filenames: false
+        stages: [commit]
+      
+      - id: cargo-doc
+        name: Rust documentation check
+        description: Check that documentation builds without warnings
+        entry: cargo doc --no-deps --document-private-items --all-features
+        language: system
+        files: \.rs$
+        pass_filenames: false
+        stages: [push]
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+
+# Global settings
+default_stages: [commit]
+fail_fast: false
