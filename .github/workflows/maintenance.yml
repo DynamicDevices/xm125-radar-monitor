@@ -1,0 +1,240 @@
+name: Maintenance
+
+on:
+  schedule:
+    # Run weekly on Sundays at 2 AM UTC
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+    inputs:
+      update_dependencies:
+        description: 'Update dependencies'
+        required: false
+        default: true
+        type: boolean
+      security_audit:
+        description: 'Run security audit'
+        required: false
+        default: true
+        type: boolean
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ============================================================================
+  # Dependency Updates
+  # ============================================================================
+  dependency-update:
+    name: Update Dependencies
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event.inputs.update_dependencies == 'true'
+    container:
+      image: rust:1.81-bullseye
+      options: --user root
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Install system dependencies
+      run: |
+        apt-get update && apt-get install -y \
+          build-essential \
+          pkg-config \
+          libudev-dev \
+          libssl-dev \
+          git
+
+    - name: Install cargo-edit and cargo-outdated
+      run: |
+        cargo install cargo-edit cargo-outdated
+
+    - name: Check for outdated dependencies
+      run: |
+        echo "## Dependency Status" >> dependency-report.md
+        echo "" >> dependency-report.md
+        echo "### Outdated Dependencies" >> dependency-report.md
+        echo "\`\`\`" >> dependency-report.md
+        cargo outdated --root-deps-only >> dependency-report.md || true
+        echo "\`\`\`" >> dependency-report.md
+
+    - name: Update patch versions
+      run: |
+        cargo update
+
+    - name: Run tests after update
+      run: |
+        cargo test --all-features
+
+    - name: Check if updates were made
+      id: check_updates
+      run: |
+        if git diff --quiet Cargo.lock; then
+          echo "updates=false" >> $GITHUB_OUTPUT
+        else
+          echo "updates=true" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Create Pull Request
+      if: steps.check_updates.outputs.updates == 'true'
+      uses: peter-evans/create-pull-request@v5
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        commit-message: "chore: update dependencies"
+        title: "chore: automated dependency updates"
+        body: |
+          ## Automated Dependency Updates
+          
+          This PR contains automated dependency updates for patch versions.
+          
+          ### Changes
+          - Updated Cargo.lock with latest patch versions
+          - All tests pass with updated dependencies
+          
+          ### Testing
+          - [x] Tests pass
+          - [x] Build succeeds
+          
+          This PR was automatically created by the maintenance workflow.
+        branch: chore/dependency-updates
+        delete-branch: true
+
+  # ============================================================================
+  # Security Monitoring
+  # ============================================================================
+  security-monitoring:
+    name: Security Monitoring
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event.inputs.security_audit == 'true'
+    container:
+      image: rust:1.81-bullseye
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Basic security checks
+      id: security
+      run: |
+        echo "Running basic security checks..."
+        
+        # Check for known vulnerable patterns
+        if grep -r "unsafe" src/; then
+          echo "unsafe_code=true" >> $GITHUB_OUTPUT
+          echo "Warning: Unsafe code detected"
+        else
+          echo "unsafe_code=false" >> $GITHUB_OUTPUT
+        fi
+        
+        # Check dependency versions
+        echo "Checking critical dependencies..."
+        cargo tree --depth 1 | grep -E "(openssl|ring|rustls|tokio|linux-embedded-hal)" || echo "No critical security crates found"
+        
+        echo "status=checked" >> $GITHUB_OUTPUT
+
+    - name: Create security report
+      run: |
+        cat > security-report.md << EOF
+        # Security Report - $(date)
+        
+        ## Dependency Check
+        \`\`\`
+        $(cargo tree --depth 1 | grep -E "(openssl|ring|rustls|tokio|linux-embedded-hal)" || echo "No critical security crates found")
+        \`\`\`
+        
+        ## Unsafe Code Check
+        - Unsafe code detected: ${{ steps.security.outputs.unsafe_code }}
+        
+        ## XM125 Specific Security Considerations
+        - I2C communication security
+        - Hardware access permissions
+        - Cross-compilation safety
+        
+        ## Recommendations
+        - Manual security audit recommended for production deployment
+        - Consider using cargo-audit when compatible version is available
+        - Review all dependencies for known vulnerabilities
+        - Validate I2C device permissions in deployment
+        EOF
+
+    - name: Upload security report
+      uses: actions/upload-artifact@v4
+      with:
+        name: security-report
+        path: security-report.md
+        retention-days: 90
+
+  # ============================================================================
+  # Code Quality Metrics
+  # ============================================================================
+  quality-metrics:
+    name: Code Quality Metrics
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    container:
+      image: rust:1.81-bullseye
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Install system dependencies
+      run: |
+        apt-get update && apt-get install -y \
+          build-essential \
+          pkg-config \
+          libudev-dev \
+          libssl-dev \
+          cloc \
+          gcc-aarch64-linux-gnu \
+          libc6-dev-arm64-cross
+
+    - name: Install quality tools
+      run: |
+        cargo install cargo-bloat cargo-outdated
+
+    - name: Generate code metrics
+      run: |
+        echo "## Code Quality Metrics" > metrics-report.md
+        echo "" >> metrics-report.md
+        
+        echo "### Lines of Code" >> metrics-report.md
+        echo "\`\`\`" >> metrics-report.md
+        cloc src/ --exclude-dir=target >> metrics-report.md
+        echo "\`\`\`" >> metrics-report.md
+        echo "" >> metrics-report.md
+        
+        echo "### Binary Size Analysis (Native)" >> metrics-report.md
+        echo "\`\`\`" >> metrics-report.md
+        cargo build --release
+        cargo bloat --release --crates >> metrics-report.md
+        echo "\`\`\`" >> metrics-report.md
+        echo "" >> metrics-report.md
+        
+        echo "### Binary Size Analysis (ARM64)" >> metrics-report.md
+        echo "\`\`\`" >> metrics-report.md
+        rustup target add aarch64-unknown-linux-gnu
+        CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc \
+        CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++ \
+        CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc \
+        cargo build --release --target aarch64-unknown-linux-gnu
+        ls -lh target/release/xm125-radar-monitor >> metrics-report.md
+        ls -lh target/aarch64-unknown-linux-gnu/release/xm125-radar-monitor >> metrics-report.md
+        echo "\`\`\`" >> metrics-report.md
+        echo "" >> metrics-report.md
+        
+        echo "### Dependency Tree" >> metrics-report.md
+        echo "\`\`\`" >> metrics-report.md
+        cargo tree --depth 2 >> metrics-report.md
+        echo "\`\`\`" >> metrics-report.md
+
+    - name: Upload metrics report
+      uses: actions/upload-artifact@v4
+      with:
+        name: quality-metrics-report
+        path: metrics-report.md
+        retention-days: 90

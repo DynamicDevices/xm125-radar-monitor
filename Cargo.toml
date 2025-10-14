@@ -1,0 +1,73 @@
+[package]
+name = "xm125-radar-monitor"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Embedded Rust application for XM125 radar module monitoring and distance detection"
+homepage = "https://github.com/sentai/xm125-radar-monitor"
+repository = "https://github.com/sentai/xm125-radar-monitor"
+documentation = "https://github.com/sentai/xm125-radar-monitor/blob/main/README.md"
+readme = "README.md"
+keywords = ["embedded", "radar", "xm125", "distance", "sensor"]
+categories = ["command-line-utilities", "embedded", "hardware-support"]
+authors = ["Alex Lennon <alex@dynamicdevices.co.uk>"]
+publish = false
+
+[package.metadata]
+maintainer = "Alex Lennon <alex@dynamicdevices.co.uk>"
+contact = "alex@dynamicdevices.co.uk"
+company = "Dynamic Devices Ltd"
+copyright = "Copyright (c) 2025 Dynamic Devices Ltd"
+
+[[bin]]
+name = "xm125-radar-monitor"
+path = "src/main.rs"
+
+[dependencies]
+# CLI and argument parsing
+clap = { version = "4.4", features = ["derive", "env", "color"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# I2C communication for XM125
+linux-embedded-hal = "0.4"
+embedded-hal = "1.0"
+nb = "1.1"
+
+# Async runtime for non-blocking operations
+tokio = { version = "1.35", features = ["full"] }
+
+# Error handling and utilities
+anyhow = "1.0"
+thiserror = "1.0"
+log = "0.4"
+env_logger = "0.10"
+
+# Configuration
+config = "0.13"
+dirs = "5.0"
+toml = "0.8"
+
+# Time and monitoring
+chrono = { version = "0.4", features = ["serde"] }
+indicatif = "0.17"
+
+# Additional utilities
+regex = "1.10"
+uuid = { version = "1.6", features = ["v4"] }
+
+[dev-dependencies]
+tokio-test = "0.4"
+mockall = "0.11"
+tempfile = "3.8"
+assert_cmd = "2.0"
+predicates = "3.0"
+
+[profile.release]
+strip = true        # Remove debug symbols for smaller binaries
+lto = true         # Link-time optimization
+codegen-units = 1  # Better optimization
+panic = "abort"    # Smaller binary size
+
+[profile.dev]
+debug = true       # Keep debug info in development
