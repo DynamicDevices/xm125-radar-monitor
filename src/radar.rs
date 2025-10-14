@@ -184,10 +184,11 @@ impl XM125Radar {
         }
 
         // Check if calibration is needed (every 5 minutes or if not calibrated)
+        #[allow(clippy::unnecessary_map_or)] // is_none_or is unstable, use map_or for compatibility
         if !self.is_calibrated
             || self
                 .last_calibration
-                .is_none_or(|t| t.elapsed() > Duration::from_secs(300))
+                .map_or(true, |t| t.elapsed() > Duration::from_secs(300))
         {
             self.calibrate().await?;
         }
