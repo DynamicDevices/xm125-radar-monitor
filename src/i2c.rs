@@ -39,7 +39,7 @@ impl I2cDevice {
 
         self.device
             .write(self.address as u8, &buffer)
-            .map_err(|e| RadarError::I2c(e))?;
+            .map_err(RadarError::I2c)?;
 
         // Small delay for XM125 processing
         thread::sleep(Duration::from_millis(1));
@@ -57,7 +57,7 @@ impl I2cDevice {
         let reg_bytes = [(register >> 8) as u8, register as u8];
         self.device
             .write(self.address as u8, &reg_bytes)
-            .map_err(|e| RadarError::I2c(e))?;
+            .map_err(RadarError::I2c)?;
 
         // Small delay for XM125 processing
         thread::sleep(Duration::from_millis(1));
@@ -66,7 +66,7 @@ impl I2cDevice {
         let mut buffer = vec![0u8; length];
         self.device
             .read(self.address as u8, &mut buffer)
-            .map_err(|e| RadarError::I2c(e))?;
+            .map_err(RadarError::I2c)?;
 
         debug!("Read data: {:?}", buffer);
         Ok(buffer)
