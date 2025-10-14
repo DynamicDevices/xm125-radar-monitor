@@ -81,7 +81,13 @@ async fn execute_command(
         }
         Commands::Disconnect => {
             radar.disconnect().await?;
-            output_response(cli, "disconnect", "Disconnected successfully", "🔌", "Disconnection")?;
+            output_response(
+                cli,
+                "disconnect",
+                "Disconnected successfully",
+                "🔌",
+                "Disconnection",
+            )?;
         }
         Commands::Info => {
             let info = radar.get_info().await?;
@@ -97,7 +103,13 @@ async fn execute_command(
         }
         Commands::Calibrate => {
             radar.calibrate().await?;
-            output_response(cli, "calibrate", "Calibration completed successfully", "🎯", "Calibration")?;
+            output_response(
+                cli,
+                "calibrate",
+                "Calibration completed successfully",
+                "🎯",
+                "Calibration",
+            )?;
         }
         Commands::Monitor { interval, count } => {
             monitor_distances(radar, cli, interval, count).await?;
@@ -116,10 +128,10 @@ async fn monitor_distances(
     use tokio::time::{sleep, Duration};
 
     let mut measurement_count = 0;
-    
+
     loop {
         let result = radar.measure_distance().await?;
-        
+
         match cli.format {
             cli::OutputFormat::Human => {
                 println!(
@@ -156,7 +168,7 @@ async fn monitor_distances(
         }
 
         measurement_count += 1;
-        
+
         if let Some(max_count) = count {
             if measurement_count >= max_count {
                 break;

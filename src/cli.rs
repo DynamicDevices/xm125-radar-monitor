@@ -35,13 +35,13 @@ pub struct Cli {
 pub enum Commands {
     /// Get XM125 radar status
     Status,
-    
+
     /// Connect to XM125 radar
     Connect,
-    
+
     /// Disconnect from XM125 radar
     Disconnect,
-    
+
     /// Get XM125 device information
     Info,
 
@@ -56,7 +56,7 @@ pub enum Commands {
         /// Measurement interval in milliseconds
         #[arg(short, long, default_value_t = 1000)]
         interval: u64,
-        
+
         /// Number of measurements (0 = infinite)
         #[arg(short, long)]
         count: Option<u32>,

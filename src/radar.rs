@@ -44,10 +44,10 @@ pub struct XM125Config {
 impl Default for XM125Config {
     fn default() -> Self {
         Self {
-            start_m: 0.18,         // 18 cm minimum distance
-            length_m: 3.0,         // 3 meter range
-            max_step_length: 24,   // Good balance of accuracy/speed
-            max_profile: 3,        // Profile 3 for medium range
+            start_m: 0.18,              // 18 cm minimum distance
+            length_m: 3.0,              // 3 meter range
+            max_step_length: 24,        // Good balance of accuracy/speed
+            max_profile: 3,             // Profile 3 for medium range
             threshold_sensitivity: 0.5, // Medium sensitivity
         }
     }
@@ -101,9 +101,9 @@ impl XM125Radar {
 
     pub async fn get_status(&mut self) -> Result<String> {
         let status = self.get_status_raw().await?;
-        
+
         let mut status_parts = Vec::new();
-        
+
         if status & STATUS_DETECTOR_READY != 0 {
             status_parts.push("Detector Ready");
         }
@@ -121,17 +121,22 @@ impl XM125Radar {
             status_parts.push("Initializing");
         }
 
-        Ok(format!("Status: {} (0x{:08X})", status_parts.join(", "), status))
+        Ok(format!(
+            "Status: {} (0x{:08X})",
+            status_parts.join(", "),
+            status
+        ))
     }
 
     pub async fn get_info(&mut self) -> Result<String> {
         // Read sensor information from XM125
         let info_data = self.i2c.read_register(REG_SENSOR_INFO, 16)?;
-        
+
         // Parse basic sensor information (this would need to match actual XM125 format)
-        let sensor_id = u32::from_le_bytes([info_data[0], info_data[1], info_data[2], info_data[3]]);
+        let sensor_id =
+            u32::from_le_bytes([info_data[0], info_data[1], info_data[2], info_data[3]]);
         let firmware_version = u16::from_le_bytes([info_data[4], info_data[5]]);
-        
+
         Ok(format!(
             "XM125 Radar Module\nSensor ID: 0x{:08X}\nFirmware Version: {}.{}\nConfig: {:.2}m-{:.2}m range",
             sensor_id,
@@ -152,14 +157,14 @@ impl XM125Radar {
         let start_time = Instant::now();
         loop {
             let status = self.get_status_raw().await?;
-            
+
             if status & STATUS_CALIBRATION_DONE != 0 {
                 self.is_calibrated = true;
                 self.last_calibration = Some(Instant::now());
                 info!("XM125 calibration completed successfully");
                 return Ok(());
             }
-            
+
             if status & STATUS_ERROR != 0 {
                 return Err(RadarError::DeviceError {
                     message: "Calibration failed - device error".to_string(),
@@ -180,8 +185,11 @@ impl XM125Radar {
         }
 
         // Check if calibration is needed (every 5 minutes or if not calibrated)
-        if !self.is_calibrated || 
-           self.last_calibration.map_or(true, |t| t.elapsed() > Duration::from_secs(300)) {
+        if !self.is_calibrated
+            || self
+                .last_calibration
+                .map_or(true, |t| t.elapsed() > Duration::from_secs(300))
+        {
             self.calibrate().await?;
         }
 
@@ -192,14 +200,14 @@ impl XM125Radar {
         let start_time = Instant::now();
         loop {
             let status = self.get_status_raw().await?;
-            
+
             if status & STATUS_MEASUREMENT_READY != 0 {
                 break;
             }
-            
+
             if status & STATUS_ERROR != 0 {
                 return Err(RadarError::MeasurementFailed(
-                    "Device error during measurement".to_string()
+                    "Device error during measurement".to_string(),
                 ));
             }
 
@@ -217,7 +225,10 @@ impl XM125Radar {
     async fn get_status_raw(&mut self) -> Result<u32> {
         let status_data = self.i2c.read_register(REG_MAIN_STATUS, 4)?;
         Ok(u32::from_le_bytes([
-            status_data[0], status_data[1], status_data[2], status_data[3]
+            status_data[0],
+            status_data[1],
+            status_data[2],
+            status_data[3],
         ]))
     }
 
@@ -231,13 +242,19 @@ impl XM125Radar {
     async fn read_distance_result(&mut self) -> Result<DistanceMeasurement> {
         // Read distance result (assuming 16 bytes: distance, strength, temp, etc.)
         let result_data = self.i2c.read_register(REG_DISTANCE_RESULT, 16)?;
-        
+
         // Parse the result data (this format would need to match actual XM125 output)
         let distance_mm = u32::from_le_bytes([
-            result_data[0], result_data[1], result_data[2], result_data[3]
+            result_data[0],
+            result_data[1],
+            result_data[2],
+            result_data[3],
         ]);
         let strength_raw = u32::from_le_bytes([
-            result_data[4], result_data[5], result_data[6], result_data[7]
+            result_data[4],
+            result_data[5],
+            result_data[6],
+            result_data[7],
         ]);
         let temperature = i16::from_le_bytes([result_data[8], result_data[9]]);
 
