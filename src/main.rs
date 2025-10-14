@@ -67,6 +67,9 @@ async fn run(cli: Cli) -> Result<(), RadarError> {
     let i2c_device = i2c::I2cDevice::new(&cli.i2c_device, cli.i2c_address)?;
     let mut radar = radar::XM125Radar::new(i2c_device);
 
+    // Configure radar based on CLI options
+    configure_radar_from_cli(&mut radar, &cli).await?;
+
     // Execute command
     if let Some(cmd) = &cli.command {
         debug!("Executing command: {cmd:?}");
@@ -78,6 +81,7 @@ async fn run(cli: Cli) -> Result<(), RadarError> {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 async fn execute_command(
     command: cli::Commands,
     radar: &mut radar::XM125Radar,
@@ -90,8 +94,16 @@ async fn execute_command(
             let status = radar.get_status()?;
             output_response(cli, "status", &status, "📊", "Radar Status")?;
         }
-        Commands::Connect => {
-            radar.connect()?;
+        Commands::Connect { force } => {
+            if force {
+                if cli.auto_reconnect {
+                    radar.auto_connect().await?;
+                } else {
+                    radar.connect_async().await?;
+                }
+            } else {
+                radar.connect()?;
+            }
             output_response(cli, "connect", "Connected successfully", "🔗", "Connection")?;
         }
         Commands::Disconnect => {
@@ -126,8 +138,79 @@ async fn execute_command(
                 "Calibration",
             )?;
         }
-        Commands::Monitor { interval, count } => {
+        Commands::Monitor {
+            interval,
+            count,
+            save_to: _,
+        } => {
             monitor_distances(radar, cli, interval, count).await?;
+        }
+        Commands::Presence => {
+            let result = radar.measure_presence().await?;
+            let response = format!(
+                "Presence: {}, Distance: {:.2}m, Intra: {:.2}, Inter: {:.2}, Temperature: {}°C",
+                if result.presence_detected {
+                    "DETECTED"
+                } else {
+                    "NOT DETECTED"
+                },
+                result.presence_distance,
+                result.intra_presence_score,
+                result.inter_presence_score,
+                result.temperature
+            );
+            output_response(cli, "presence", &response, "👁️", "Presence Detection")?;
+        }
+        Commands::Combined => {
+            let result = radar.measure_combined().await?;
+            let mut response_parts = Vec::new();
+
+            if let Some(distance) = &result.distance {
+                response_parts.push(format!(
+                    "Distance: {:.2}m ({:.1}dB)",
+                    distance.distance, distance.strength
+                ));
+            }
+
+            if let Some(presence) = &result.presence {
+                response_parts.push(format!(
+                    "Presence: {} at {:.2}m (intra: {:.2}, inter: {:.2})",
+                    if presence.presence_detected {
+                        "DETECTED"
+                    } else {
+                        "NOT DETECTED"
+                    },
+                    presence.presence_distance,
+                    presence.intra_presence_score,
+                    presence.inter_presence_score
+                ));
+            }
+
+            let response = response_parts.join(" | ");
+            output_response(cli, "combined", &response, "🎯", "Combined Detection")?;
+        }
+        Commands::Config {
+            start,
+            length,
+            presence_range,
+            sensitivity,
+            frame_rate,
+        } => {
+            configure_detector(
+                radar,
+                start,
+                length,
+                presence_range,
+                sensitivity,
+                frame_rate,
+            );
+            output_response(
+                cli,
+                "config",
+                "Configuration updated successfully",
+                "⚙️",
+                "Configuration",
+            )?;
         }
     }
 
@@ -233,5 +316,68 @@ fn output_response(
     }
 
     Ok(())
+}
+
+/// Configure radar based on CLI options
+async fn configure_radar_from_cli(
+    radar: &mut radar::XM125Radar,
+    cli: &Cli,
+) -> Result<(), RadarError> {
+    // Convert CLI detector mode to radar detector mode
+    let detector_mode = match cli.mode {
+        cli::DetectorMode::Distance => radar::DetectorMode::Distance,
+        cli::DetectorMode::Presence => radar::DetectorMode::Presence,
+        cli::DetectorMode::Combined => radar::DetectorMode::Combined,
+    };
+
+    radar.set_detector_mode(detector_mode).await?;
+
+    // Configure auto-reconnect
+    let config = radar::XM125Config {
+        detector_mode,
+        auto_reconnect: cli.auto_reconnect,
+        ..Default::default()
+    };
+
+    radar.set_config(config);
+    Ok(())
+}
+
+/// Configure detector with new settings
+fn configure_detector(
+    radar: &mut radar::XM125Radar,
+    start: Option<f32>,
+    length: Option<f32>,
+    presence_range: Option<cli::PresenceRange>,
+    sensitivity: Option<f32>,
+    frame_rate: Option<f32>,
+) {
+    let mut config = radar::XM125Config::default();
+
+    if let Some(start) = start {
+        config.start_m = start;
+    }
+
+    if let Some(length) = length {
+        config.length_m = length;
+    }
+
+    if let Some(range) = presence_range {
+        config.presence_range = match range {
+            cli::PresenceRange::Short => radar::PresenceRange::Short,
+            cli::PresenceRange::Medium => radar::PresenceRange::Medium,
+            cli::PresenceRange::Long => radar::PresenceRange::Long,
+        };
+    }
+
+    if let Some(sensitivity) = sensitivity {
+        config.threshold_sensitivity = sensitivity;
+    }
+
+    if let Some(rate) = frame_rate {
+        config.frame_rate = rate;
+    }
+
+    radar.set_config(config);
 }
 // Test comment

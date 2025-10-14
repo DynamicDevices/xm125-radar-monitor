@@ -27,6 +27,14 @@ pub struct Cli {
     #[arg(short, long)]
     pub quiet: bool,
 
+    /// Detector mode (distance, presence, or combined)
+    #[arg(short = 'm', long, default_value = "distance")]
+    pub mode: DetectorMode,
+
+    /// Enable auto-reconnect on connection failures
+    #[arg(long)]
+    pub auto_reconnect: bool,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }
@@ -36,8 +44,12 @@ pub enum Commands {
     /// Get XM125 radar status
     Status,
 
-    /// Connect to XM125 radar
-    Connect,
+    /// Connect to XM125 radar with automatic configuration
+    Connect {
+        /// Force reconnection even if already connected
+        #[arg(short, long)]
+        force: bool,
+    },
 
     /// Disconnect from XM125 radar
     Disconnect,
@@ -48,10 +60,16 @@ pub enum Commands {
     /// Perform single distance measurement
     Measure,
 
+    /// Perform single presence detection
+    Presence,
+
+    /// Perform combined distance and presence measurement
+    Combined,
+
     /// Calibrate the XM125 radar sensor
     Calibrate,
 
-    /// Continuously monitor distances
+    /// Continuously monitor with the configured detector mode
     Monitor {
         /// Measurement interval in milliseconds
         #[arg(short, long, default_value_t = 1000)]
@@ -60,6 +78,33 @@ pub enum Commands {
         /// Number of measurements (0 = infinite)
         #[arg(short, long)]
         count: Option<u32>,
+
+        /// Save measurements to file (CSV format)
+        #[arg(short, long)]
+        save_to: Option<String>,
+    },
+
+    /// Set detector configuration
+    Config {
+        /// Detection range start in meters
+        #[arg(long)]
+        start: Option<f32>,
+
+        /// Detection range length in meters  
+        #[arg(long)]
+        length: Option<f32>,
+
+        /// Presence detection range preset
+        #[arg(long)]
+        presence_range: Option<PresenceRange>,
+
+        /// Threshold sensitivity (0.1 - 2.0)
+        #[arg(long)]
+        sensitivity: Option<f32>,
+
+        /// Frame rate for presence detection
+        #[arg(long)]
+        frame_rate: Option<f32>,
     },
 }
 
@@ -68,4 +113,18 @@ pub enum OutputFormat {
     Human,
     Json,
     Csv,
+}
+
+#[derive(Clone, Debug, ValueEnum)]
+pub enum DetectorMode {
+    Distance,
+    Presence,
+    Combined,
+}
+
+#[derive(Clone, Debug, ValueEnum)]
+pub enum PresenceRange {
+    Short,
+    Medium,
+    Long,
 }

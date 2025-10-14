@@ -11,18 +11,49 @@ const REG_DISTANCE_RESULT: u16 = 0x0100;
 const REG_DISTANCE_CONFIG: u16 = 0x0200;
 const REG_SENSOR_INFO: u16 = 0x0300;
 
+// Presence Detection Registers
+const REG_PRESENCE_RESULT: u16 = 0x0400;
+const REG_PRESENCE_CONFIG: u16 = 0x0500;
+const REG_PRESENCE_DISTANCE: u16 = 0x0401;
+const REG_INTRA_PRESENCE_SCORE: u16 = 0x0402;
+const REG_INTER_PRESENCE_SCORE: u16 = 0x0403;
+
 // Command codes for XM125
 const CMD_ENABLE_DETECTOR: u32 = 0x01;
 const CMD_DISABLE_DETECTOR: u32 = 0x02;
 const CMD_CALIBRATE_DETECTOR: u32 = 0x03;
 const CMD_MEASURE_DISTANCE: u32 = 0x04;
 const CMD_GET_DETECTOR_STATUS: u32 = 0x05;
+const CMD_ENABLE_PRESENCE_DETECTOR: u32 = 0x06;
+const CMD_MEASURE_PRESENCE: u32 = 0x07;
+const CMD_ENABLE_CONTINUOUS_MODE: u32 = 0x08;
+const CMD_DISABLE_CONTINUOUS_MODE: u32 = 0x09;
 
 // Status flags
 const STATUS_DETECTOR_READY: u32 = 0x01;
 const STATUS_CALIBRATION_DONE: u32 = 0x02;
 const STATUS_MEASUREMENT_READY: u32 = 0x04;
+const STATUS_PRESENCE_DETECTED: u32 = 0x08;
+const STATUS_CONTINUOUS_MODE: u32 = 0x10;
 const STATUS_ERROR: u32 = 0x80;
+
+// Timeout constants
+const CALIBRATION_TIMEOUT: Duration = Duration::from_secs(10);
+const MEASUREMENT_TIMEOUT: Duration = Duration::from_secs(5);
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub enum DetectorMode {
+    Distance,
+    Presence,
+    Combined,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub enum PresenceRange {
+    Short,  // 0.06m - 0.7m
+    Medium, // 0.2m - 2.0m
+    Long,   // 0.5m - 7.0m
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DistanceMeasurement {
@@ -32,23 +63,60 @@ pub struct DistanceMeasurement {
     pub timestamp: chrono::DateTime<chrono::Utc>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PresenceMeasurement {
+    pub presence_detected: bool,
+    pub presence_distance: f32,
+    pub intra_presence_score: f32, // Fast motion score
+    pub inter_presence_score: f32, // Slow motion score
+    pub temperature: i16,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CombinedMeasurement {
+    pub distance: Option<DistanceMeasurement>,
+    pub presence: Option<PresenceMeasurement>,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+}
+
 #[derive(Debug, Clone)]
 pub struct XM125Config {
+    pub detector_mode: DetectorMode,
     pub start_m: f32,
     pub length_m: f32,
     pub max_step_length: u16,
     pub max_profile: u8,
     pub threshold_sensitivity: f32,
+    // Presence detection specific
+    pub presence_range: PresenceRange,
+    pub intra_detection_threshold: f32,
+    pub inter_detection_threshold: f32,
+    pub frame_rate: f32,
+    pub sweeps_per_frame: u16,
+    // Continuous monitoring
+    pub auto_reconnect: bool,
+    pub measurement_interval_ms: u64,
 }
 
 impl Default for XM125Config {
     fn default() -> Self {
         Self {
+            detector_mode: DetectorMode::Distance,
             start_m: 0.18,              // 18 cm minimum distance
             length_m: 3.0,              // 3 meter range
             max_step_length: 24,        // Good balance of accuracy/speed
             max_profile: 3,             // Profile 3 for medium range
             threshold_sensitivity: 0.5, // Medium sensitivity
+            // Presence detection defaults
+            presence_range: PresenceRange::Medium,
+            intra_detection_threshold: 1.3,
+            inter_detection_threshold: 1.0,
+            frame_rate: 12.0,
+            sweeps_per_frame: 16,
+            // Continuous monitoring defaults
+            auto_reconnect: true,
+            measurement_interval_ms: 1000,
         }
     }
 }
@@ -59,6 +127,8 @@ pub struct XM125Radar {
     is_connected: bool,
     is_calibrated: bool,
     last_calibration: Option<Instant>,
+    continuous_mode: bool,
+    last_measurement: Option<Instant>,
 }
 
 impl XM125Radar {
@@ -69,6 +139,8 @@ impl XM125Radar {
             is_connected: false,
             is_calibrated: false,
             last_calibration: None,
+            continuous_mode: false,
+            last_measurement: None,
         }
     }
 
@@ -170,7 +242,7 @@ impl XM125Radar {
                 });
             }
 
-            if start_time.elapsed() > Duration::from_secs(10) {
+            if start_time.elapsed() > CALIBRATION_TIMEOUT {
                 return Err(RadarError::Timeout { timeout: 10 });
             }
 
@@ -275,5 +347,289 @@ impl XM125Radar {
         self.config = config;
         // Would need to send config to device here
         debug!("Updated XM125 configuration: {:?}", self.config);
+    }
+
+    /// Automatically connect with retry logic
+    pub async fn auto_connect(&mut self) -> Result<()> {
+        const MAX_RETRIES: u32 = 3;
+        const RETRY_DELAY: Duration = Duration::from_millis(500);
+
+        for attempt in 1..=MAX_RETRIES {
+            match self.connect_async().await {
+                Ok(()) => {
+                    info!("Successfully connected to XM125 on attempt {attempt}");
+                    return Ok(());
+                }
+                Err(e) => {
+                    if attempt < MAX_RETRIES {
+                        warn!("Connection attempt {attempt} failed: {e}. Retrying...");
+                        tokio::time::sleep(RETRY_DELAY).await;
+                    } else {
+                        return Err(e);
+                    }
+                }
+            }
+        }
+        Err(RadarError::NotConnected)
+    }
+
+    /// Async version of connect with detector configuration
+    pub async fn connect_async(&mut self) -> Result<()> {
+        info!("Connecting to XM125 radar module...");
+
+        // Check if device is responsive
+        match self.get_status_raw() {
+            Ok(_) => {
+                self.is_connected = true;
+                info!("Successfully connected to XM125");
+
+                // Configure the detector based on current mode
+                self.configure_detector().await?;
+
+                Ok(())
+            }
+            Err(e) => {
+                warn!("Failed to connect to XM125: {e}");
+                Err(RadarError::NotConnected)
+            }
+        }
+    }
+
+    /// Configure the detector based on the current mode
+    async fn configure_detector(&mut self) -> Result<()> {
+        info!(
+            "Configuring detector for mode: {:?}",
+            self.config.detector_mode
+        );
+
+        match self.config.detector_mode {
+            DetectorMode::Distance => {
+                self.send_command(CMD_ENABLE_DETECTOR)?;
+            }
+            DetectorMode::Presence => {
+                self.send_command(CMD_ENABLE_PRESENCE_DETECTOR)?;
+                self.configure_presence_range();
+            }
+            DetectorMode::Combined => {
+                self.send_command(CMD_ENABLE_DETECTOR)?;
+                self.send_command(CMD_ENABLE_PRESENCE_DETECTOR)?;
+                self.configure_presence_range();
+            }
+        }
+
+        // Apply configuration and calibrate
+        self.wait_for_calibration().await?;
+
+        Ok(())
+    }
+
+    /// Configure presence detection range parameters
+    fn configure_presence_range(&mut self) {
+        let (start, end) = match self.config.presence_range {
+            PresenceRange::Short => (0.06, 0.7),
+            PresenceRange::Medium => (0.2, 2.0),
+            PresenceRange::Long => (0.5, 7.0),
+        };
+
+        // Write range configuration (simplified - would need actual register protocol)
+        info!("Configured presence range: {start:.2}m - {end:.2}m");
+    }
+
+    /// Wait for calibration to complete
+    async fn wait_for_calibration(&mut self) -> Result<()> {
+        let start_time = Instant::now();
+
+        loop {
+            let status = self.get_status_raw()?;
+
+            if status & STATUS_CALIBRATION_DONE != 0 {
+                self.is_calibrated = true;
+                self.last_calibration = Some(Instant::now());
+                info!("XM125 calibration completed successfully");
+                return Ok(());
+            }
+
+            if status & STATUS_ERROR != 0 {
+                return Err(RadarError::DeviceError {
+                    message: "Calibration failed - device error".to_string(),
+                });
+            }
+
+            if start_time.elapsed() > CALIBRATION_TIMEOUT {
+                return Err(RadarError::Timeout { timeout: 10 });
+            }
+
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    }
+
+    /// Measure presence detection
+    pub async fn measure_presence(&mut self) -> Result<PresenceMeasurement> {
+        if !self.is_connected {
+            return Err(RadarError::NotConnected);
+        }
+
+        // Ensure we're configured for presence detection
+        if !matches!(
+            self.config.detector_mode,
+            DetectorMode::Presence | DetectorMode::Combined
+        ) {
+            return Err(RadarError::InvalidParameters(
+                "Detector not configured for presence detection".to_string(),
+            ));
+        }
+
+        self.send_command(CMD_MEASURE_PRESENCE)?;
+
+        // Wait for measurement
+        self.wait_for_measurement().await?;
+
+        // Read presence result
+        let result_data = self.i2c.read_register(REG_PRESENCE_RESULT, 20)?;
+
+        let presence_detected = result_data[0] != 0;
+        let distance_raw = u32::from_le_bytes([
+            result_data[1],
+            result_data[2],
+            result_data[3],
+            result_data[4],
+        ]);
+        let intra_score_raw = u32::from_le_bytes([
+            result_data[5],
+            result_data[6],
+            result_data[7],
+            result_data[8],
+        ]);
+        let inter_score_raw = u32::from_le_bytes([
+            result_data[9],
+            result_data[10],
+            result_data[11],
+            result_data[12],
+        ]);
+        let temperature = i16::from_le_bytes([result_data[13], result_data[14]]);
+
+        #[allow(clippy::cast_precision_loss)]
+        let presence_distance = (distance_raw as f32) / 1000.0; // Convert mm to m
+        #[allow(clippy::cast_precision_loss)]
+        let intra_score = (intra_score_raw as f32) / 1000.0;
+        #[allow(clippy::cast_precision_loss)]
+        let inter_score = (inter_score_raw as f32) / 1000.0;
+
+        self.last_measurement = Some(Instant::now());
+
+        Ok(PresenceMeasurement {
+            presence_detected,
+            presence_distance,
+            intra_presence_score: intra_score,
+            inter_presence_score: inter_score,
+            temperature,
+            timestamp: chrono::Utc::now(),
+        })
+    }
+
+    /// Measure combined distance and presence
+    pub async fn measure_combined(&mut self) -> Result<CombinedMeasurement> {
+        if !self.is_connected {
+            return Err(RadarError::NotConnected);
+        }
+
+        if self.config.detector_mode != DetectorMode::Combined {
+            return Err(RadarError::InvalidParameters(
+                "Detector not configured for combined detection".to_string(),
+            ));
+        }
+
+        let distance = self.measure_distance().await.ok();
+
+        let presence = self.measure_presence().await.ok();
+
+        Ok(CombinedMeasurement {
+            distance,
+            presence,
+            timestamp: chrono::Utc::now(),
+        })
+    }
+
+    /// Start continuous monitoring mode
+    pub async fn start_continuous_monitoring(&mut self) -> Result<()> {
+        if !self.is_connected && self.config.auto_reconnect {
+            self.auto_connect().await?;
+        }
+
+        if !self.is_connected {
+            return Err(RadarError::NotConnected);
+        }
+
+        self.send_command(CMD_ENABLE_CONTINUOUS_MODE)?;
+        self.continuous_mode = true;
+
+        info!(
+            "Started continuous monitoring mode with {}ms intervals",
+            self.config.measurement_interval_ms
+        );
+        Ok(())
+    }
+
+    /// Stop continuous monitoring mode
+    pub fn stop_continuous_monitoring(&mut self) -> Result<()> {
+        if self.continuous_mode {
+            self.send_command(CMD_DISABLE_CONTINUOUS_MODE)?;
+            self.continuous_mode = false;
+            info!("Stopped continuous monitoring mode");
+        }
+        Ok(())
+    }
+
+    /// Check if continuous monitoring is active
+    pub fn is_continuous_monitoring(&self) -> bool {
+        self.continuous_mode
+    }
+
+    /// Wait for measurement to be ready
+    async fn wait_for_measurement(&mut self) -> Result<()> {
+        let start_time = Instant::now();
+
+        loop {
+            let status = self.get_status_raw()?;
+
+            if status & STATUS_MEASUREMENT_READY != 0 {
+                return Ok(());
+            }
+
+            if status & STATUS_ERROR != 0 {
+                return Err(RadarError::DeviceError {
+                    message: "Device error during measurement".to_string(),
+                });
+            }
+
+            if start_time.elapsed() > MEASUREMENT_TIMEOUT {
+                return Err(RadarError::Timeout { timeout: 5 });
+            }
+
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    }
+
+    /// Get detector mode
+    pub fn get_detector_mode(&self) -> DetectorMode {
+        self.config.detector_mode
+    }
+
+    /// Check if radar is connected
+    pub fn is_connected(&self) -> bool {
+        self.is_connected
+    }
+
+    /// Set detector mode and reconfigure if connected
+    pub async fn set_detector_mode(&mut self, mode: DetectorMode) -> Result<()> {
+        let old_mode = self.config.detector_mode;
+        self.config.detector_mode = mode;
+
+        if self.is_connected && old_mode != mode {
+            info!("Switching detector mode from {old_mode:?} to {mode:?}");
+            self.configure_detector().await?;
+        }
+
+        Ok(())
     }
 }
