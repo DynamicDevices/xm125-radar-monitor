@@ -5,12 +5,15 @@ A Rust application for reading distance measurements from the Acconeer XM125 rad
 ## Features
 
 - **Real-time Distance Monitoring**: Continuous distance measurements with configurable intervals
-- **I2C Communication**: Direct communication with XM125 via Linux I2C interface
+- **Presence Detection**: Advanced presence sensing with intra/inter-presence scores
+- **Combined Measurements**: Simultaneous distance and presence detection
+- **I2C Communication**: Direct communication with XM125 via Linux I2C interface with flexible bus/address configuration
 - **Multiple Output Formats**: Human-readable, JSON, and CSV output formats
 - **Cross-Platform**: Supports native x86_64 and cross-compilation for ARM64/AArch64
 - **Robust Error Handling**: Comprehensive error handling for I2C communication issues
+- **Automatic Connection Management**: Auto-reconnect functionality with retry logic
 - **Automatic Calibration**: Handles sensor calibration automatically
-- **CLI Interface**: Full command-line interface with multiple commands
+- **CLI Interface**: Full command-line interface with multiple detector modes and commands
 
 ## Hardware Requirements
 
@@ -51,8 +54,8 @@ cargo build --release
 # Get device status
 ./target/release/xm125-radar-monitor status
 
-# Connect to device
-./target/release/xm125-radar-monitor connect
+# Connect to device (with auto-reconnect)
+./target/release/xm125-radar-monitor --auto-reconnect connect --force
 
 # Get device information
 ./target/release/xm125-radar-monitor info
@@ -60,14 +63,26 @@ cargo build --release
 # Single distance measurement
 ./target/release/xm125-radar-monitor measure
 
+# Single presence detection
+./target/release/xm125-radar-monitor presence
+
+# Combined distance and presence measurement
+./target/release/xm125-radar-monitor combined
+
 # Calibrate the sensor
 ./target/release/xm125-radar-monitor calibrate
+
+# Configure detector settings
+./target/release/xm125-radar-monitor config --start 0.2 --length 1.0 --sensitivity 0.5
 
 # Continuous monitoring (1 second interval)
 ./target/release/xm125-radar-monitor monitor --interval 1000
 
 # Monitor with specific count and custom I2C settings
-./target/release/xm125-radar-monitor -d /dev/i2c-1 -a 0x52 monitor --count 100 --interval 500
+./target/release/xm125-radar-monitor -b 1 -a 0x52 monitor --count 100 --interval 500
+
+# Monitor with presence detection mode
+./target/release/xm125-radar-monitor --mode presence monitor --interval 2000
 ```
 
 ### Output Formats
@@ -85,8 +100,11 @@ cargo build --release
 
 ### Configuration Options
 
-- **I2C Device**: `-d, --i2c-device` (default: /dev/i2c-1)
-- **I2C Address**: `-a, --i2c-address` (default: 0x52)
+- **I2C Bus**: `-b, --i2c-bus` (specify bus number, e.g., 1 for /dev/i2c-1)
+- **I2C Device**: `-d, --i2c-device` (full device path, e.g., /dev/i2c-1)
+- **I2C Address**: `-a, --i2c-address` (default: 0x52, supports hex and decimal)
+- **Detector Mode**: `--mode` (distance, presence, combined)
+- **Auto-reconnect**: `--auto-reconnect` (enable automatic connection retry)
 - **Output Format**: `-f, --format` (human, json, csv)
 - **Verbose Logging**: `-v, --verbose`
 - **Quiet Mode**: `-q, --quiet`
@@ -97,16 +115,20 @@ This application implements the XM125 I2C protocol based on Acconeer's documenta
 
 ### Register Map
 - **Command Register**: 0x0000 - Send commands to XM125
-- **Status Register**: 0x0002 - Read device status
-- **Distance Result**: 0x0100 - Read measurement results
-- **Configuration**: 0x0200 - Device configuration
+- **Status Register**: 0x0002 - Read device status  
+- **Distance Result**: 0x0100 - Read distance measurement results
+- **Presence Result**: 0x0400 - Read presence detection results
+- **Distance Configuration**: 0x0200 - Distance detector configuration
+- **Presence Configuration**: 0x0500 - Presence detector configuration
 - **Sensor Info**: 0x0300 - Device information
 
 ### Communication Protocol
 1. **Initialization**: Check device presence and status
-2. **Calibration**: Perform sensor calibration (automatic)
-3. **Measurement**: Send measurement command and read results
-4. **Error Handling**: Monitor status for errors and calibration needs
+2. **Configuration**: Set detector mode (distance, presence, or combined)
+3. **Calibration**: Perform sensor calibration (automatic or manual)
+4. **Measurement**: Send measurement commands and read results
+5. **Continuous Mode**: Optional continuous monitoring with configurable intervals
+6. **Error Handling**: Monitor status for errors, calibration needs, and connection issues
 
 ## Cross-Compilation
 
@@ -126,16 +148,15 @@ scp target/aarch64-unknown-linux-gnu/release/xm125-radar-monitor user@target-dev
 
 ```
 src/
-├── main.rs           # Application entry point
-├── cli.rs            # Command-line interface
-├── error.rs          # Error handling
+├── main.rs           # Application entry point and command routing
+├── cli.rs            # Command-line interface with clap
+├── error.rs          # Centralized error handling  
 ├── i2c.rs            # I2C communication layer
-└── radar.rs          # XM125 radar interface
+└── radar.rs          # XM125 radar interface with detector modes
 
-references/           # XM125 documentation
-├── doc/              # Acconeer documentation
-├── XM125-datasheet.pdf
-└── README.txt
+docs/                 # Project documentation
+├── DEVELOPMENT.md    # Development tools and Git hooks
+└── REFERENCE_POLICY.md # Policy for handling reference documents
 ```
 
 ### Testing
