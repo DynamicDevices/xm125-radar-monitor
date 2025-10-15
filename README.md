@@ -78,6 +78,20 @@ sudo ./xm125-radar-monitor firmware update presence --force
 sudo ./xm125-radar-monitor firmware verify
 ```
 
+## Detection Modes Comparison
+
+| Feature | Distance | Presence | Breathing |
+|---------|----------|----------|-----------|
+| **Primary Use** | Precise range measurement | Motion/occupancy detection | Breathing pattern analysis |
+| **Range** | 0.1-3.0m | 0.5-7.0m (configurable) | 0.3-1.5m |
+| **Update Rate** | ~100ms | ~100ms | 5-20s (analysis time) |
+| **Output** | Distance, strength, temperature | Detection flag, motion scores | BPM, app state, temperature |
+| **Power** | Medium | Low-Medium | Medium-High |
+| **Sensitivity** | Object reflectivity | Motion detection | Micro-movements |
+| **Applications** | Level sensing, proximity | Smart lighting, security | Health monitoring, sleep |
+| **Registers** | 0x10 (packed), 0x11-0x1B (peaks) | 0x10-0x13 (separate) | 0x10 (result), 0x11-0x12 (data) |
+| **Calibration** | CFAR thresholds | Motion baselines | Presence + breathing analysis |
+
 ## Configuration
 
 Default settings optimized for Sentai hardware:
@@ -114,6 +128,39 @@ Use `--verbose` for detailed I2C transaction logs.
 - `i2cdetect`, `i2cget`: I2C utilities
 - GPIO sysfs interface
 - Control script: `/home/fio/xm125-control.sh`
+
+## Future Applications
+
+The XM125 hardware supports additional detection modes available in Acconeer's reference implementations:
+
+### High-Priority Candidates
+
+| Application | Description | Use Cases |
+|-------------|-------------|-----------|
+| **Smart Presence** | Multi-zone detection with configurable areas | Smart lighting, HVAC, security systems |
+| **Tank Level** | Liquid level measurement with size-specific configs | Industrial monitoring, fuel/water tanks |
+| **Parking Detection** | Vehicle presence with obstruction filtering | Smart parking, garage automation |
+| **Hand Motion** | Gesture recognition for touchless interfaces | Faucets, UI controls, accessibility |
+| **Vibration Monitoring** | Frequency analysis with displacement measurement | Machinery health, structural monitoring |
+
+### Advanced Features
+
+- **Low Power Modes**: Hibernate/sleep for battery applications
+- **IQ Data Processing**: Raw signal access for custom algorithms  
+- **Multi-Configuration**: Dynamic parameter switching
+- **Surface Velocity**: Doppler-based motion measurement
+- **Calibration Caching**: Faster startup with stored calibrations
+
+### Implementation Approach
+
+Future modes would follow the established architecture:
+- Modular firmware binaries (`*.bin`)
+- I2C register protocol extensions
+- CLI integration with `--mode <type>`
+- Unified monitoring and output formats
+- Automatic firmware management via `stm32flash`
+
+*Contributions welcome - see existing distance/presence/breathing implementations as reference.*
 
 ## License
 
