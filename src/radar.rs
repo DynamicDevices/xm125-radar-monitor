@@ -6,22 +6,31 @@ use std::time::{Duration, Instant};
 
 // XM125 I2C Register Addresses (from distance_reg_protocol.h)
 const REG_VERSION: u16 = 0; // DISTANCE_REG_VERSION_ADDRESS
+#[allow(dead_code)] // Reserved for protocol validation
 const REG_PROTOCOL_STATUS: u16 = 1; // DISTANCE_REG_PROTOCOL_STATUS_ADDRESS
+#[allow(dead_code)] // Reserved for measurement counting
 const REG_MEASURE_COUNTER: u16 = 2; // DISTANCE_REG_MEASURE_COUNTER_ADDRESS
 const REG_DETECTOR_STATUS: u16 = 3; // DISTANCE_REG_DETECTOR_STATUS_ADDRESS
 const REG_DISTANCE_RESULT: u16 = 16; // DISTANCE_REG_DISTANCE_RESULT_ADDRESS
+#[allow(dead_code)] // Reserved for peak detection
 const REG_PEAK0_DISTANCE: u16 = 17; // DISTANCE_REG_PEAK0_DISTANCE_ADDRESS
+#[allow(dead_code)] // Reserved for peak detection
 const REG_PEAK0_STRENGTH: u16 = 27; // DISTANCE_REG_PEAK0_STRENGTH_ADDRESS
+#[allow(dead_code)] // Reserved for range configuration
 const REG_START_CONFIG: u16 = 64; // DISTANCE_REG_START_ADDRESS
+#[allow(dead_code)] // Reserved for range configuration
 const REG_END_CONFIG: u16 = 65; // DISTANCE_REG_END_ADDRESS
 const REG_COMMAND: u16 = 256; // DISTANCE_REG_COMMAND_ADDRESS
+#[allow(dead_code)] // Reserved for application identification
 const REG_APPLICATION_ID: u16 = 65535; // DISTANCE_REG_APPLICATION_ID_ADDRESS
 
 // Command codes for XM125 (from distance_reg_protocol.h)
 const CMD_APPLY_CONFIG_AND_CALIBRATE: u32 = 1; // DISTANCE_REG_COMMAND_ENUM_APPLY_CONFIG_AND_CALIBRATE
 const CMD_MEASURE_DISTANCE: u32 = 2; // DISTANCE_REG_COMMAND_ENUM_MEASURE_DISTANCE
 const CMD_APPLY_CONFIGURATION: u32 = 3; // DISTANCE_REG_COMMAND_ENUM_APPLY_CONFIGURATION
+#[allow(dead_code)] // Reserved for manual calibration
 const CMD_CALIBRATE: u32 = 4; // DISTANCE_REG_COMMAND_ENUM_CALIBRATE
+#[allow(dead_code)] // Reserved for recalibration
 const CMD_RECALIBRATE: u32 = 5; // DISTANCE_REG_COMMAND_ENUM_RECALIBRATE
 const CMD_RESET_MODULE: u32 = 0x5253_5421; // DISTANCE_REG_COMMAND_ENUM_RESET_MODULE
 
@@ -30,7 +39,9 @@ const CMD_ENABLE_DETECTOR: u32 = CMD_APPLY_CONFIGURATION;
 const CMD_DISABLE_DETECTOR: u32 = CMD_RESET_MODULE;
 const CMD_ENABLE_PRESENCE_DETECTOR: u32 = CMD_APPLY_CONFIGURATION;
 const CMD_MEASURE_PRESENCE: u32 = CMD_MEASURE_DISTANCE; // Placeholder - presence needs different protocol
+#[allow(dead_code)] // Reserved for continuous monitoring
 const CMD_ENABLE_CONTINUOUS_MODE: u32 = CMD_APPLY_CONFIGURATION;
+#[allow(dead_code)] // Reserved for continuous monitoring
 const CMD_DISABLE_CONTINUOUS_MODE: u32 = CMD_RESET_MODULE;
 
 // Placeholder register for compatibility
@@ -41,7 +52,9 @@ const REG_PRESENCE_RESULT: u16 = REG_DISTANCE_RESULT; // Placeholder - needs pre
 const STATUS_DETECTOR_READY: u32 = 0x01;
 const STATUS_CALIBRATION_DONE: u32 = 0x02;
 const STATUS_MEASUREMENT_READY: u32 = 0x04;
+#[allow(dead_code)] // Reserved for presence status
 const STATUS_PRESENCE_DETECTED: u32 = 0x08;
+#[allow(dead_code)] // Reserved for continuous mode status
 const STATUS_CONTINUOUS_MODE: u32 = 0x10;
 const STATUS_ERROR: u32 = 0x80;
 
@@ -93,17 +106,25 @@ pub struct XM125Config {
     pub detector_mode: DetectorMode,
     pub start_m: f32,
     pub length_m: f32,
+    #[allow(dead_code)] // Reserved for advanced configuration
     pub max_step_length: u16,
+    #[allow(dead_code)] // Reserved for profile selection
     pub max_profile: u8,
     pub threshold_sensitivity: f32,
     // Presence detection specific
     pub presence_range: PresenceRange,
+    #[allow(dead_code)] // Reserved for presence tuning
     pub intra_detection_threshold: f32,
+    #[allow(dead_code)] // Reserved for presence tuning
     pub inter_detection_threshold: f32,
+    #[allow(dead_code)] // Reserved for frame rate control
     pub frame_rate: f32,
+    #[allow(dead_code)] // Reserved for sweep configuration
     pub sweeps_per_frame: u16,
     // Continuous monitoring
+    #[allow(dead_code)] // Used in configuration logic
     pub auto_reconnect: bool,
+    #[allow(dead_code)] // Reserved for monitoring intervals
     pub measurement_interval_ms: u64,
 }
 
@@ -135,6 +156,7 @@ pub struct XM125Radar {
     is_connected: bool,
     is_calibrated: bool,
     last_calibration: Option<Instant>,
+    #[allow(dead_code)] // Reserved for continuous monitoring state
     continuous_mode: bool,
     last_measurement: Option<Instant>,
 }
@@ -560,6 +582,7 @@ impl XM125Radar {
     }
 
     /// Start continuous monitoring mode
+    #[allow(dead_code)] // Reserved for future continuous monitoring feature
     pub async fn start_continuous_monitoring(&mut self) -> Result<()> {
         if !self.is_connected && self.config.auto_reconnect {
             self.auto_connect().await?;
@@ -580,6 +603,7 @@ impl XM125Radar {
     }
 
     /// Stop continuous monitoring mode
+    #[allow(dead_code)] // Reserved for future continuous monitoring feature
     pub fn stop_continuous_monitoring(&mut self) -> Result<()> {
         if self.continuous_mode {
             self.send_command(CMD_DISABLE_CONTINUOUS_MODE)?;
@@ -590,6 +614,7 @@ impl XM125Radar {
     }
 
     /// Check if continuous monitoring is active
+    #[allow(dead_code)] // Reserved for future continuous monitoring feature
     pub fn is_continuous_monitoring(&self) -> bool {
         self.continuous_mode
     }
@@ -620,11 +645,13 @@ impl XM125Radar {
     }
 
     /// Get detector mode
+    #[allow(dead_code)] // Reserved for configuration queries
     pub fn get_detector_mode(&self) -> DetectorMode {
         self.config.detector_mode
     }
 
     /// Check if radar is connected
+    #[allow(dead_code)] // Reserved for connection state queries
     pub fn is_connected(&self) -> bool {
         self.is_connected
     }

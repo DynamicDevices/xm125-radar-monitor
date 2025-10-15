@@ -73,6 +73,7 @@ impl I2cDevice {
         Ok(buffer)
     }
 
+    #[allow(dead_code)] // Reserved for complex command sequences
     pub fn write_read_register(
         &mut self,
         register: u16,

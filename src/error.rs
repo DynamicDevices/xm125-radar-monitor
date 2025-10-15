@@ -12,6 +12,7 @@ pub enum RadarError {
     Timeout { timeout: u64 },
 
     #[error("Invalid response from XM125: {response}")]
+    #[allow(dead_code)] // Reserved for future protocol validation
     InvalidResponse { response: String },
 
     #[error("XM125 returned error: {message}")]
@@ -30,9 +31,11 @@ pub enum RadarError {
     InvalidParameters(String),
 
     #[error("Calibration required - temperature change detected")]
+    #[allow(dead_code)] // Reserved for automatic calibration logic
     CalibrationRequired,
 
     #[error("Radar initialization failed: {0}")]
+    #[allow(dead_code)] // Reserved for initialization error handling
     InitializationFailed(String),
 
     #[error("Distance measurement failed: {0}")]

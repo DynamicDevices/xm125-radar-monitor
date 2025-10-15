@@ -15,22 +15,21 @@ impl Cli {
     pub fn get_i2c_device_path(&self) -> String {
         if let Some(device) = &self.i2c_device {
             device.clone()
-        } else if let Some(bus) = self.i2c_bus {
-            format!("/dev/i2c-{bus}")
         } else {
-            "/dev/i2c-1".to_string() // Default fallback
+            format!("/dev/i2c-{}", self.i2c_bus)
         }
     }
 }
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
+#[allow(clippy::struct_excessive_bools)] // CLI flags are naturally boolean
 pub struct Cli {
-    /// I2C bus number (will be used as /dev/i2c-N if --i2c-device not specified)
-    #[arg(short = 'b', long)]
-    pub i2c_bus: Option<u8>,
+    /// I2C bus number (will be used as /dev/i2c-N if --i2c-device not specified) [default: 2 for Sentai target]
+    #[arg(short = 'b', long, default_value_t = 2)]
+    pub i2c_bus: u8,
 
-    /// I2C device path (e.g., /dev/i2c-1)
+    /// I2C device path (e.g., /dev/i2c-2 for Sentai target)
     #[arg(short = 'd', long)]
     pub i2c_device: Option<String>,
 
@@ -58,9 +57,13 @@ pub struct Cli {
     #[arg(short = 'm', long, default_value = "distance")]
     pub mode: DetectorMode,
 
-    /// Enable auto-reconnect on connection failures
-    #[arg(long)]
+    /// Enable auto-reconnect on connection failures (enabled by default)
+    #[arg(long, default_value_t = true)]
     pub auto_reconnect: bool,
+
+    /// Disable auto-reconnect (use simple connection)
+    #[arg(long, conflicts_with = "auto_reconnect")]
+    pub no_auto_reconnect: bool,
 
     #[command(subcommand)]
     pub command: Option<Commands>,

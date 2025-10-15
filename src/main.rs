@@ -100,8 +100,9 @@ async fn execute_command(
             output_response(cli, "status", &status, "📊", "Radar Status")?;
         }
         Commands::Connect { force } => {
+            let auto_reconnect = cli.auto_reconnect && !cli.no_auto_reconnect;
             if force {
-                if cli.auto_reconnect {
+                if auto_reconnect {
                     radar.auto_connect().await?;
                 } else {
                     radar.connect_async().await?;
@@ -337,10 +338,11 @@ async fn configure_radar_from_cli(
 
     radar.set_detector_mode(detector_mode).await?;
 
-    // Configure auto-reconnect
+    // Configure auto-reconnect (default true, unless --no-auto-reconnect is specified)
+    let auto_reconnect = cli.auto_reconnect && !cli.no_auto_reconnect;
     let config = radar::XM125Config {
         detector_mode,
-        auto_reconnect: cli.auto_reconnect,
+        auto_reconnect,
         ..Default::default()
     };
 

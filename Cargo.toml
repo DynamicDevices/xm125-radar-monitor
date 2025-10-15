@@ -13,6 +13,11 @@ categories = ["command-line-utilities", "embedded", "hardware-support"]
 authors = ["Alex J Lennon <ajlennon@dynamicdevices.co.uk>"]
 publish = false
 
+[lints.rust]
+warnings = "deny"
+unused_imports = "deny"
+dead_code = "deny"
+
 [package.metadata]
 maintainer = "Alex J Lennon <ajlennon@dynamicdevices.co.uk>"
 contact = "info@dynamicdevices.co.uk"
