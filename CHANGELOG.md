@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.0.0] - 2025-10-15
+
+### Production Release
+- **Complete XM125 Radar Monitor**: Production-ready CLI tool for Acconeer XM125 radar modules
+- **Automatic Firmware Management**: Seamless firmware updates with `stm32flash` integration
+- **Multi-Mode Detection**: Distance, presence, and breathing detection with auto-switching
+- **Hardware Control**: GPIO-based reset, bootloader, and wake control
+- **Comprehensive CI/CD**: GitHub Actions with cross-compilation, testing, and security audits
+- **Professional Documentation**: Engineer-focused guides with troubleshooting and examples
+- **GPL v3 License**: Open source with proper copyright and maintainer information
+
+### Key Features
+- **Auto-Reconnect**: Robust I2C communication with automatic recovery
+- **Firmware Verification**: MD5 checksums and application ID validation  
+- **Hardware Test Suite**: Automated testing framework with data analysis
+- **Cross-Platform**: Native x86_64 and ARM64 builds with optimized profiles
+- **Security Audited**: Regular vulnerability scanning and dependency updates
+
+### Technical Excellence
+- **Zero Warnings**: Strict Clippy compliance with comprehensive error handling
+- **Optimized Builds**: LTO-enabled release builds with minimal binary size
+- **Complete Coverage**: Unit tests, integration tests, and hardware validation
+- **Professional Standards**: Proper licensing, copyright, and maintainer information
+
 ## [0.2.0] - 2025-10-15
 
 ### Added
