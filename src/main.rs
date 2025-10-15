@@ -50,6 +50,24 @@ async fn main() {
         println!("{APP_NAME} v{VERSION}");
         println!("Copyright (c) 2025 Dynamic Devices Ltd. All rights reserved.");
         println!("XM125 Radar Module Monitor");
+
+        // Show key configuration at startup
+        let mode_str = match cli.mode {
+            cli::DetectorMode::Distance => "Distance",
+            cli::DetectorMode::Presence => "Presence",
+            cli::DetectorMode::Combined => "Combined",
+        };
+        println!(
+            "Mode: {} | I2C: /dev/i2c-{} @ 0x{:02X} | Auto-reconnect: {}",
+            mode_str,
+            cli.i2c_bus,
+            cli.i2c_address,
+            if cli.auto_reconnect && !cli.no_auto_reconnect {
+                "ON"
+            } else {
+                "OFF"
+            }
+        );
         println!();
     }
 

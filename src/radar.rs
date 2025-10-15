@@ -429,6 +429,62 @@ impl XM125Radar {
         self.config = config;
         // Would need to send config to device here
         debug!("Updated XM125 configuration: {:?}", self.config);
+
+        // Log user-friendly configuration information
+        info!("📡 XM125 Configuration:");
+        info!("  Detector Mode: {:?}", self.config.detector_mode);
+
+        match self.config.detector_mode {
+            DetectorMode::Presence | DetectorMode::Combined => {
+                let (preset_start, preset_end) = match self.config.presence_range {
+                    PresenceRange::Short => (0.06, 0.7),
+                    PresenceRange::Medium => (0.2, 2.0),
+                    PresenceRange::Long => (0.5, 7.0),
+                };
+
+                info!(
+                    "  Presence Range: {:?} ({:.2}m - {:.2}m)",
+                    self.config.presence_range, preset_start, preset_end
+                );
+                info!(
+                    "  Detection Sensitivity: {:.1} (0.1=low, 0.5=medium, 2.0=high)",
+                    self.config.threshold_sensitivity
+                );
+                info!("  Frame Rate: {:.1} Hz", self.config.frame_rate);
+                info!(
+                    "  Intra Threshold: {:.1} (fast motion)",
+                    self.config.intra_detection_threshold
+                );
+                info!(
+                    "  Inter Threshold: {:.1} (slow motion)",
+                    self.config.inter_detection_threshold
+                );
+            }
+            DetectorMode::Distance => {
+                let end_range = self.config.start_m + self.config.length_m;
+                info!(
+                    "  Distance Range: {:.2}m - {:.2}m (length: {:.2}m)",
+                    self.config.start_m, end_range, self.config.length_m
+                );
+                info!(
+                    "  Detection Sensitivity: {:.1} (0.1=low, 0.5=medium, 2.0=high)",
+                    self.config.threshold_sensitivity
+                );
+            }
+        }
+
+        info!(
+            "  Auto-reconnect: {}",
+            if self.config.auto_reconnect {
+                "enabled"
+            } else {
+                "disabled"
+            }
+        );
+        info!(
+            "  Measurement Interval: {}ms",
+            self.config.measurement_interval_ms
+        );
     }
 
     /// Automatically connect with retry logic
