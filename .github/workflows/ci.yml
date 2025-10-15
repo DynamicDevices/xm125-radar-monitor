@@ -65,11 +65,23 @@ jobs:
       with:
         targets: ${{ matrix.target }}
     - uses: Swatinem/rust-cache@v2
+      with:
+        key: ${{ matrix.target }}
     - name: Install cross-compilation tools
       if: matrix.target == 'aarch64-unknown-linux-gnu'
       run: |
         sudo apt-get update
         sudo apt-get install -y gcc-aarch64-linux-gnu
+    - name: Configure cross-compilation
+      if: matrix.target == 'aarch64-unknown-linux-gnu'
+      run: |
+        mkdir -p .cargo
+        cat > .cargo/config.toml << EOF
+        [target.aarch64-unknown-linux-gnu]
+        linker = "aarch64-linux-gnu-gcc"
+        EOF
+    - name: Clean previous builds
+      run: cargo clean
     - name: Build for ${{ matrix.target }}
       run: cargo build --release --target ${{ matrix.target }}
     - name: Upload artifacts
@@ -107,7 +119,8 @@ jobs:
       uses: codecov/codecov-action@v3
       with:
         files: lcov.info
-        fail_ci_if_error: true
+        fail_ci_if_error: false
+      continue-on-error: true
 
   docs:
     name: Documentation

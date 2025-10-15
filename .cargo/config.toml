@@ -1,0 +1,25 @@
+# Cargo configuration for cross-compilation
+
+[target.aarch64-unknown-linux-gnu]
+linker = "aarch64-linux-gnu-gcc"
+
+[target.armv7-unknown-linux-gnueabihf]
+linker = "arm-linux-gnueabihf-gcc"
+
+# Build configuration
+[build]
+# Uncomment to set default target for cross-compilation
+# target = "aarch64-unknown-linux-gnu"
+
+[profile.release]
+# Optimize for size and performance
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.dev]
+# Faster debug builds
+opt-level = 0
+debug = true
