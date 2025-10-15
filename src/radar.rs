@@ -281,6 +281,12 @@ impl XM125Radar {
     }
 
     pub async fn measure_distance(&mut self) -> Result<DistanceMeasurement> {
+        // Auto-connect if not connected and auto-reconnect is enabled
+        if !self.is_connected && self.config.auto_reconnect {
+            info!("Auto-connecting for distance measurement...");
+            self.auto_connect().await?;
+        }
+
         if !self.is_connected {
             return Err(RadarError::NotConnected);
         }
@@ -496,6 +502,12 @@ impl XM125Radar {
 
     /// Measure presence detection
     pub async fn measure_presence(&mut self) -> Result<PresenceMeasurement> {
+        // Auto-connect if not connected and auto-reconnect is enabled
+        if !self.is_connected && self.config.auto_reconnect {
+            info!("Auto-connecting for presence measurement...");
+            self.auto_connect().await?;
+        }
+
         if !self.is_connected {
             return Err(RadarError::NotConnected);
         }
@@ -560,6 +572,12 @@ impl XM125Radar {
 
     /// Measure combined distance and presence
     pub async fn measure_combined(&mut self) -> Result<CombinedMeasurement> {
+        // Auto-connect if not connected and auto-reconnect is enabled
+        if !self.is_connected && self.config.auto_reconnect {
+            info!("Auto-connecting for combined measurement...");
+            self.auto_connect().await?;
+        }
+
         if !self.is_connected {
             return Err(RadarError::NotConnected);
         }
