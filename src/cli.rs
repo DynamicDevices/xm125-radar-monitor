@@ -202,11 +202,17 @@ pub enum Commands {
     /// presence detector mode.
     Presence,
 
-    /// Perform combined distance and presence measurement (requires --mode combined)
-    ///
-    /// Takes both distance and presence readings in a single operation.
-    /// Useful for applications requiring both measurement types.
-    Combined,
+            /// Perform combined distance and presence measurement (requires --mode combined)
+            /// 
+            /// Takes both distance and presence readings in a single operation.
+            /// Useful for applications requiring both measurement types.
+            Combined,
+
+            /// Perform breathing detection measurement (requires --mode breathing)
+            /// 
+            /// Monitors breathing patterns and estimates breathing rate in BPM.
+            /// Shows application state, breathing rate, and presence information.
+            Breathing,
 
     /// Calibrate the XM125 radar sensor
     ///
@@ -335,6 +341,7 @@ impl From<crate::cli::DetectorMode> for firmware::FirmwareType {
         match mode {
             DetectorMode::Distance => firmware::FirmwareType::Distance,
             DetectorMode::Presence | DetectorMode::Combined => firmware::FirmwareType::Presence, // Default to presence for combined
+            DetectorMode::Breathing => firmware::FirmwareType::Breathing,
         }
     }
 }
@@ -357,6 +364,8 @@ pub enum DetectorMode {
     Presence,
     /// Combined mode - both distance and presence measurements
     Combined,
+    /// Breathing detection mode - monitors breathing patterns
+    Breathing,
 }
 
 #[derive(Clone, Debug, ValueEnum)]

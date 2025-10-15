@@ -4,6 +4,17 @@ use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
+// Allow pedantic clippy warnings for this module - many are false positives for embedded code
+#[allow(clippy::unreadable_literal)] // Hex constants are clearer in embedded context
+#[allow(clippy::cast_precision_loss)] // Acceptable precision loss for sensor data
+#[allow(clippy::cast_possible_truncation)] // Values are validated to be in range
+#[allow(clippy::cast_sign_loss)] // Values are validated to be positive
+#[allow(clippy::uninlined_format_args)] // Format args are clearer when separate
+#[allow(clippy::too_many_lines)] // Complex embedded protocols require long functions
+#[allow(clippy::unused_async)] // Some functions may become async in future
+#[allow(clippy::trivially_copy_pass_by_ref)] // Consistent API design
+#[allow(clippy::match_same_arms)] // Explicit fallback patterns for robustness
+
 // XM125 I2C Register Addresses (from distance_reg_protocol.h)
 const REG_VERSION: u16 = 0; // DISTANCE_REG_VERSION_ADDRESS
 #[allow(dead_code)] // Reserved for protocol validation
@@ -16,10 +27,29 @@ const REG_DISTANCE_RESULT: u16 = 16; // DISTANCE_REG_DISTANCE_RESULT_ADDRESS
 const REG_PEAK0_DISTANCE: u16 = 17; // DISTANCE_REG_PEAK0_DISTANCE_ADDRESS
 #[allow(dead_code)] // Reserved for peak detection
 const REG_PEAK0_STRENGTH: u16 = 27; // DISTANCE_REG_PEAK0_STRENGTH_ADDRESS
-#[allow(dead_code)] // Reserved for range configuration
-const REG_START_CONFIG: u16 = 64; // DISTANCE_REG_START_ADDRESS
-#[allow(dead_code)] // Reserved for range configuration
-const REG_END_CONFIG: u16 = 65; // DISTANCE_REG_END_ADDRESS
+                                    // Distance detector configuration registers (from distance_reg_protocol.h)
+const REG_START_CONFIG: u16 = 64; // DISTANCE_REG_START_ADDRESS (0x40)
+const REG_END_CONFIG: u16 = 65; // DISTANCE_REG_END_ADDRESS (0x41)
+#[allow(dead_code)] // Reserved for advanced configuration
+const REG_MAX_STEP_LENGTH: u16 = 66; // DISTANCE_REG_MAX_STEP_LENGTH_ADDRESS (0x42)
+#[allow(dead_code)] // Reserved for advanced configuration
+const REG_CLOSE_RANGE_LEAKAGE_CANCELLATION: u16 = 67; // DISTANCE_REG_CLOSE_RANGE_LEAKAGE_CANCELLATION_ADDRESS (0x43)
+#[allow(dead_code)] // Reserved for advanced configuration
+const REG_SIGNAL_QUALITY: u16 = 68; // DISTANCE_REG_SIGNAL_QUALITY_ADDRESS (0x44)
+const REG_MAX_PROFILE: u16 = 69; // DISTANCE_REG_MAX_PROFILE_ADDRESS (0x45)
+#[allow(dead_code)] // Reserved for advanced configuration
+const REG_THRESHOLD_METHOD: u16 = 70; // DISTANCE_REG_THRESHOLD_METHOD_ADDRESS (0x46)
+#[allow(dead_code)] // Reserved for advanced configuration
+const REG_PEAK_SORTING: u16 = 71; // DISTANCE_REG_PEAK_SORTING_ADDRESS (0x47)
+#[allow(dead_code)] // Reserved for advanced configuration
+const REG_NUM_FRAMES_RECORDED_THRESHOLD: u16 = 72; // DISTANCE_REG_NUM_FRAMES_RECORDED_THRESHOLD_ADDRESS (0x48)
+#[allow(dead_code)] // Reserved for advanced configuration
+const REG_FIXED_AMPLITUDE_THRESHOLD_VALUE: u16 = 73; // DISTANCE_REG_FIXED_AMPLITUDE_THRESHOLD_VALUE_ADDRESS (0x49)
+const REG_THRESHOLD_SENSITIVITY: u16 = 74; // DISTANCE_REG_THRESHOLD_SENSITIVITY_ADDRESS (0x4A)
+#[allow(dead_code)] // Reserved for advanced configuration
+const REG_REFLECTOR_SHAPE: u16 = 75; // DISTANCE_REG_REFLECTOR_SHAPE_ADDRESS (0x4B)
+#[allow(dead_code)] // Reserved for advanced configuration
+const REG_FIXED_STRENGTH_THRESHOLD_VALUE: u16 = 76; // DISTANCE_REG_FIXED_STRENGTH_THRESHOLD_VALUE_ADDRESS (0x4C)
 const REG_COMMAND: u16 = 256; // DISTANCE_REG_COMMAND_ADDRESS
 #[allow(dead_code)] // Reserved for application identification
 const REG_APPLICATION_ID: u16 = 65535; // DISTANCE_REG_APPLICATION_ID_ADDRESS
@@ -29,6 +59,26 @@ const REG_PRESENCE_RESULT: u16 = 16; // PRESENCE_REG_PRESENCE_RESULT_ADDRESS
 const REG_PRESENCE_DISTANCE: u16 = 17; // PRESENCE_REG_PRESENCE_DISTANCE_ADDRESS
 const REG_INTRA_PRESENCE_SCORE: u16 = 18; // PRESENCE_REG_INTRA_PRESENCE_SCORE_ADDRESS
 const REG_INTER_PRESENCE_SCORE: u16 = 19; // PRESENCE_REG_INTER_PRESENCE_SCORE_ADDRESS
+
+// Breathing Detection Registers (from ref_app_breathing_reg_protocol.h)
+const REG_BREATHING_RESULT: u16 = 16; // REF_APP_BREATHING_REG_BREATHING_RESULT_ADDRESS
+const REG_BREATHING_RATE: u16 = 17; // REF_APP_BREATHING_REG_BREATHING_RATE_ADDRESS
+const REG_BREATHING_APP_STATE: u16 = 18; // REF_APP_BREATHING_REG_APP_STATE_ADDRESS
+
+// Breathing Configuration Registers
+const REG_BREATHING_START: u16 = 64; // REF_APP_BREATHING_REG_START_ADDRESS
+const REG_BREATHING_END: u16 = 65; // REF_APP_BREATHING_REG_END_ADDRESS
+const REG_BREATHING_NUM_DISTANCES_TO_ANALYZE: u16 = 66; // REF_APP_BREATHING_REG_NUM_DISTANCES_TO_ANALYZE_ADDRESS
+const REG_BREATHING_DISTANCE_DETERMINATION_DURATION_S: u16 = 67; // REF_APP_BREATHING_REG_DISTANCE_DETERMINATION_DURATION_S_ADDRESS
+const REG_BREATHING_USE_PRESENCE_PROCESSOR: u16 = 68; // REF_APP_BREATHING_REG_USE_PRESENCE_PROCESSOR_ADDRESS
+const REG_BREATHING_LOWEST_BREATHING_RATE: u16 = 69; // REF_APP_BREATHING_REG_LOWEST_BREATHING_RATE_ADDRESS
+const REG_BREATHING_HIGHEST_BREATHING_RATE: u16 = 70; // REF_APP_BREATHING_REG_HIGHEST_BREATHING_RATE_ADDRESS
+const REG_BREATHING_TIME_SERIES_LENGTH_S: u16 = 71; // REF_APP_BREATHING_REG_TIME_SERIES_LENGTH_S_ADDRESS
+const REG_BREATHING_FRAME_RATE: u16 = 72; // REF_APP_BREATHING_REG_FRAME_RATE_ADDRESS
+const REG_BREATHING_SWEEPS_PER_FRAME: u16 = 73; // REF_APP_BREATHING_REG_SWEEPS_PER_FRAME_ADDRESS
+const REG_BREATHING_HWAAS: u16 = 74; // REF_APP_BREATHING_REG_HWAAS_ADDRESS
+const REG_BREATHING_PROFILE: u16 = 75; // REF_APP_BREATHING_REG_PROFILE_ADDRESS
+const REG_BREATHING_INTRA_DETECTION_THRESHOLD: u16 = 76; // REF_APP_BREATHING_REG_INTRA_DETECTION_THRESHOLD_ADDRESS
 
 // Presence Configuration Registers (estimated based on typical Acconeer patterns)
 #[allow(dead_code)] // Reserved for presence range configuration
@@ -58,7 +108,14 @@ const CMD_PRESENCE_START: u32 = 2; // PRESENCE_REG_COMMAND_ENUM_START
 #[allow(dead_code)] // Reserved for stopping presence measurements
 const CMD_PRESENCE_STOP: u32 = 3; // PRESENCE_REG_COMMAND_ENUM_STOP
 
+// Breathing detector specific commands (from ref_app_breathing_reg_protocol.h)
+const CMD_BREATHING_APPLY_CONFIGURATION: u32 = 1; // REF_APP_BREATHING_REG_COMMAND_ENUM_APPLY_CONFIGURATION
+const CMD_BREATHING_START_APP: u32 = 2; // REF_APP_BREATHING_REG_COMMAND_ENUM_START_APP
+#[allow(dead_code)] // Reserved for stopping breathing measurements
+const CMD_BREATHING_STOP_APP: u32 = 3; // REF_APP_BREATHING_REG_COMMAND_ENUM_STOP_APP
+
 // Legacy/placeholder commands for compatibility (not in actual XM125 protocol)
+#[allow(dead_code)] // Reserved for backward compatibility
 const CMD_ENABLE_DETECTOR: u32 = CMD_APPLY_CONFIGURATION;
 const CMD_DISABLE_DETECTOR: u32 = CMD_RESET_MODULE;
 const CMD_ENABLE_PRESENCE_DETECTOR: u32 = CMD_PRESENCE_APPLY_CONFIGURATION;
@@ -72,35 +129,172 @@ const CMD_DISABLE_CONTINUOUS_MODE: u32 = CMD_RESET_MODULE;
 // Placeholder register for compatibility
 const REG_SENSOR_INFO: u16 = REG_VERSION; // Use version register for device info
 
-// Status flags from presence_reg_protocol.h (corrected to match official specification)
-#[allow(dead_code)] // Reserved for complete status checking
-const STATUS_RSS_REGISTER_OK: u32 = 0x01; // Bit 0: RSS Register OK
-#[allow(dead_code)] // Reserved for complete status checking
-const STATUS_CONFIG_CREATE_OK: u32 = 0x02; // Bit 1: Config Create OK
-#[allow(dead_code)] // Reserved for complete status checking
-const STATUS_SENSOR_CREATE_OK: u32 = 0x04; // Bit 2: Sensor Create OK
-const STATUS_SENSOR_CALIBRATE_OK: u32 = 0x08; // Bit 3: Sensor Calibrate OK
-const STATUS_DETECTOR_CREATE_OK: u32 = 0x10; // Bit 4: Detector Create OK
+// Status flags from distance_reg_protocol.h (official Acconeer specification)
+// Distance detector status bits (different from presence detector)
+#[allow(dead_code)] // Reserved for distance-specific status checking
+const STATUS_DISTANCE_RSS_REGISTER_OK: u32 = 0x00000001; // Bit 0
+#[allow(dead_code)] // Reserved for distance-specific status checking
+const STATUS_DISTANCE_CONFIG_CREATE_OK: u32 = 0x00000002; // Bit 1
+#[allow(dead_code)] // Reserved for distance-specific status checking
+const STATUS_DISTANCE_SENSOR_CREATE_OK: u32 = 0x00000004; // Bit 2
+#[allow(dead_code)] // Reserved for distance-specific status checking
+const STATUS_DISTANCE_DETECTOR_CREATE_OK: u32 = 0x00000008; // Bit 3 (different from presence!)
+#[allow(dead_code)] // Reserved for distance-specific status checking
+const STATUS_DISTANCE_DETECTOR_BUFFER_OK: u32 = 0x00000010; // Bit 4
+#[allow(dead_code)] // Reserved for distance-specific status checking
+const STATUS_DISTANCE_SENSOR_BUFFER_OK: u32 = 0x00000020; // Bit 5
+#[allow(dead_code)] // Reserved for distance-specific status checking
+const STATUS_DISTANCE_CALIBRATION_BUFFER_OK: u32 = 0x00000040; // Bit 6
+#[allow(dead_code)] // Reserved for distance-specific status checking
+const STATUS_DISTANCE_CONFIG_APPLY_OK: u32 = 0x00000080; // Bit 7
+#[allow(dead_code)] // Reserved for distance-specific status checking
+const STATUS_DISTANCE_SENSOR_CALIBRATE_OK: u32 = 0x00000100; // Bit 8
+#[allow(dead_code)] // Reserved for distance-specific status checking
+const STATUS_DISTANCE_DETECTOR_CALIBRATE_OK: u32 = 0x00000200; // Bit 9
 
-// Legacy compatibility (mapped to correct presence detector bits)
-const STATUS_DETECTOR_READY: u32 = STATUS_DETECTOR_CREATE_OK; // 0x10 (bit 4)
-const STATUS_CALIBRATION_DONE: u32 = STATUS_SENSOR_CALIBRATE_OK; // 0x08 (bit 3)
+// Distance detector error flags
+#[allow(dead_code)] // Reserved for distance-specific error handling
+const STATUS_DISTANCE_RSS_REGISTER_ERROR: u32 = 0x00010000; // Bit 16
+#[allow(dead_code)] // Reserved for distance-specific error handling
+const STATUS_DISTANCE_CONFIG_CREATE_ERROR: u32 = 0x00020000; // Bit 17
+#[allow(dead_code)] // Reserved for distance-specific error handling
+const STATUS_DISTANCE_SENSOR_CREATE_ERROR: u32 = 0x00040000; // Bit 18
+#[allow(dead_code)] // Reserved for distance-specific error handling
+const STATUS_DISTANCE_DETECTOR_CREATE_ERROR: u32 = 0x00080000; // Bit 19
+#[allow(dead_code)] // Reserved for distance-specific error handling
+const STATUS_DISTANCE_DETECTOR_BUFFER_ERROR: u32 = 0x00100000; // Bit 20
+#[allow(dead_code)] // Reserved for distance-specific error handling
+const STATUS_DISTANCE_SENSOR_BUFFER_ERROR: u32 = 0x00200000; // Bit 21
+#[allow(dead_code)] // Reserved for distance-specific error handling
+const STATUS_DISTANCE_CALIBRATION_BUFFER_ERROR: u32 = 0x00400000; // Bit 22
+#[allow(dead_code)] // Reserved for distance-specific error handling
+const STATUS_DISTANCE_CONFIG_APPLY_ERROR: u32 = 0x00800000; // Bit 23
+#[allow(dead_code)] // Reserved for distance-specific error handling
+const STATUS_DISTANCE_SENSOR_CALIBRATE_ERROR: u32 = 0x01000000; // Bit 24
+#[allow(dead_code)] // Reserved for distance-specific error handling
+const STATUS_DISTANCE_DETECTOR_CALIBRATE_ERROR: u32 = 0x02000000; // Bit 25
+#[allow(dead_code)] // Reserved for distance-specific error handling
+const STATUS_DISTANCE_DETECTOR_ERROR: u32 = 0x10000000; // Bit 28
+#[allow(dead_code)] // Reserved for distance-specific error handling
+const STATUS_DISTANCE_BUSY: u32 = 0x80000000; // Bit 31
+
+// Presence detector status bits (from presence_reg_protocol.h)
+#[allow(dead_code)] // Reserved for presence-specific status checking
+const STATUS_PRESENCE_RSS_REGISTER_OK: u32 = 0x00000001; // Bit 0
+#[allow(dead_code)] // Reserved for presence-specific status checking
+const STATUS_PRESENCE_CONFIG_CREATE_OK: u32 = 0x00000002; // Bit 1
+#[allow(dead_code)] // Reserved for presence-specific status checking
+const STATUS_PRESENCE_SENSOR_CREATE_OK: u32 = 0x00000004; // Bit 2
+#[allow(dead_code)] // Reserved for presence-specific status checking
+const STATUS_PRESENCE_SENSOR_CALIBRATE_OK: u32 = 0x00000008; // Bit 3
+#[allow(dead_code)] // Reserved for presence-specific status checking
+const STATUS_PRESENCE_DETECTOR_CREATE_OK: u32 = 0x00000010; // Bit 4 (different from distance!)
+#[allow(dead_code)] // Reserved for presence-specific status checking
+const STATUS_PRESENCE_DETECTOR_BUFFER_OK: u32 = 0x00000020; // Bit 5
+#[allow(dead_code)] // Reserved for presence-specific status checking
+const STATUS_PRESENCE_SENSOR_BUFFER_OK: u32 = 0x00000040; // Bit 6
+#[allow(dead_code)] // Reserved for presence-specific status checking
+const STATUS_PRESENCE_CONFIG_APPLY_OK: u32 = 0x00000080; // Bit 7
+
+// Presence detector error flags
+#[allow(dead_code)] // Reserved for presence-specific error handling
+const STATUS_PRESENCE_RSS_REGISTER_ERROR: u32 = 0x00010000; // Bit 16
+#[allow(dead_code)] // Reserved for presence-specific error handling
+const STATUS_PRESENCE_CONFIG_CREATE_ERROR: u32 = 0x00020000; // Bit 17
+#[allow(dead_code)] // Reserved for presence-specific error handling
+const STATUS_PRESENCE_SENSOR_CREATE_ERROR: u32 = 0x00040000; // Bit 18
+#[allow(dead_code)] // Reserved for presence-specific error handling
+const STATUS_PRESENCE_SENSOR_CALIBRATE_ERROR: u32 = 0x00080000; // Bit 19
+#[allow(dead_code)] // Reserved for presence-specific error handling
+const STATUS_PRESENCE_DETECTOR_CREATE_ERROR: u32 = 0x00100000; // Bit 20
+#[allow(dead_code)] // Reserved for presence-specific error handling
+const STATUS_PRESENCE_DETECTOR_BUFFER_ERROR: u32 = 0x00200000; // Bit 21
+#[allow(dead_code)] // Reserved for presence-specific error handling
+const STATUS_PRESENCE_SENSOR_BUFFER_ERROR: u32 = 0x00400000; // Bit 22
+#[allow(dead_code)] // Reserved for presence-specific error handling
+const STATUS_PRESENCE_CONFIG_APPLY_ERROR: u32 = 0x00800000; // Bit 23
+#[allow(dead_code)] // Reserved for presence-specific error handling
+const STATUS_PRESENCE_DETECTOR_ERROR: u32 = 0x10000000; // Bit 28
+#[allow(dead_code)] // Reserved for presence-specific error handling
+const STATUS_PRESENCE_BUSY: u32 = 0x80000000; // Bit 31
+
+// Generic status flags (for backward compatibility)
+const STATUS_RSS_REGISTER_OK: u32 = 0x00000001;
+const STATUS_CONFIG_CREATE_OK: u32 = 0x00000002;
+const STATUS_SENSOR_CREATE_OK: u32 = 0x00000004;
+const STATUS_SENSOR_CALIBRATE_OK: u32 = 0x00000008; // Presence bit 3
+const STATUS_DETECTOR_CREATE_OK: u32 = 0x00000010; // Presence bit 4
+const STATUS_CONFIG_APPLY_OK: u32 = 0x00000080;
+const STATUS_BUSY: u32 = 0x80000000;
+const STATUS_ERROR: u32 = 0x10000000;
+
+// Error masks
+const STATUS_CONFIG_CREATE_ERROR: u32 = 0x00020000;
+const STATUS_SENSOR_CREATE_ERROR: u32 = 0x00040000;
+const STATUS_SENSOR_CALIBRATE_ERROR: u32 = 0x01000000; // Distance bit 24
+const STATUS_DETECTOR_CREATE_ERROR: u32 = 0x00100000; // Presence bit 20
+const STATUS_DETECTOR_CALIBRATE_ERROR: u32 = 0x02000000; // Distance bit 25
+const STATUS_CONFIG_APPLY_ERROR: u32 = 0x00800000;
+
+// Status masks for efficient checking
+#[allow(dead_code)] // Reserved for comprehensive status checking
+const STATUS_ALL_OK_MASK: u32 = STATUS_RSS_REGISTER_OK
+    | STATUS_CONFIG_CREATE_OK
+    | STATUS_SENSOR_CREATE_OK
+    | STATUS_SENSOR_CALIBRATE_OK
+    | STATUS_DETECTOR_CREATE_OK;
+const STATUS_ALL_ERROR_MASK: u32 = STATUS_CONFIG_CREATE_ERROR
+    | STATUS_SENSOR_CREATE_ERROR
+    | STATUS_SENSOR_CALIBRATE_ERROR
+    | STATUS_DETECTOR_CREATE_ERROR
+    | STATUS_DETECTOR_CALIBRATE_ERROR
+    | STATUS_CONFIG_APPLY_ERROR;
+
+// Legacy compatibility
+const STATUS_DETECTOR_READY: u32 = STATUS_DETECTOR_CREATE_OK;
+const STATUS_CALIBRATION_DONE: u32 = STATUS_SENSOR_CALIBRATE_OK;
 const STATUS_MEASUREMENT_READY: u32 = 0x04; // Keep for distance detector compatibility
-#[allow(dead_code)] // Reserved for presence status
-const STATUS_PRESENCE_DETECTED: u32 = 0x08;
-#[allow(dead_code)] // Reserved for continuous mode status
-const STATUS_CONTINUOUS_MODE: u32 = 0x10;
-const STATUS_ERROR: u32 = 0x80;
 
 // Timeout constants - based on Acconeer documentation
 const CALIBRATION_TIMEOUT: Duration = Duration::from_secs(2); // Reduced from 10s based on docs showing 500ms-1s typical
 const MEASUREMENT_TIMEOUT: Duration = Duration::from_secs(5);
+
+// Distance detector default values (from distance_reg_protocol.h)
+const DISTANCE_START_DEFAULT: u32 = 100; // 100mm = 0.1m (closer than Acconeer default for better detection)
+const DISTANCE_END_DEFAULT: u32 = 3000; // 3000mm = 3.0m
+const DISTANCE_MAX_STEP_LENGTH_DEFAULT: u32 = 0; // Auto step length
+const DISTANCE_CLOSE_RANGE_LEAKAGE_CANCELLATION_DEFAULT: u32 = 1; // Enabled
+const DISTANCE_SIGNAL_QUALITY_DEFAULT: u32 = 15000; // Signal quality threshold
+const DISTANCE_MAX_PROFILE_DEFAULT: u32 = 5; // Profile 5 (DISTANCE_REG_MAX_PROFILE_ENUM_PROFILE5)
+const DISTANCE_THRESHOLD_METHOD_DEFAULT: u32 = 0; // CFAR method (DISTANCE_REG_THRESHOLD_METHOD_ENUM_CFAR)
+const DISTANCE_PEAK_SORTING_DEFAULT: u32 = 0; // Strongest peaks (DISTANCE_REG_PEAK_SORTING_ENUM_STRONGEST)
+const DISTANCE_NUM_FRAMES_RECORDED_THRESHOLD_DEFAULT: u32 = 100; // Frames for threshold calculation
+const DISTANCE_FIXED_AMPLITUDE_THRESHOLD_VALUE_DEFAULT: u32 = 100000; // Fixed amplitude threshold
+const DISTANCE_THRESHOLD_SENSITIVITY_DEFAULT: u32 = 100; // 0.1 sensitivity (factor 1000) - much more sensitive
+const DISTANCE_REFLECTOR_SHAPE_DEFAULT: u32 = 0; // Generic reflector (DISTANCE_REG_REFLECTOR_SHAPE_ENUM_GENERIC)
+const DISTANCE_FIXED_STRENGTH_THRESHOLD_VALUE_DEFAULT: u32 = 0; // Fixed strength threshold
+
+// Breathing detector default values (from ref_app_breathing_reg_protocol.h)
+const BREATHING_START_DEFAULT: u32 = 300; // 300mm = 0.3m
+const BREATHING_END_DEFAULT: u32 = 1500; // 1500mm = 1.5m
+const BREATHING_NUM_DISTANCES_TO_ANALYZE_DEFAULT: u32 = 3; // Number of distance points
+const BREATHING_DISTANCE_DETERMINATION_DURATION_S_DEFAULT: u32 = 5; // 5 seconds
+const BREATHING_USE_PRESENCE_PROCESSOR_DEFAULT: u32 = 1; // Enabled
+const BREATHING_LOWEST_BREATHING_RATE_DEFAULT: u32 = 6; // 6 BPM
+const BREATHING_HIGHEST_BREATHING_RATE_DEFAULT: u32 = 60; // 60 BPM
+const BREATHING_TIME_SERIES_LENGTH_S_DEFAULT: u32 = 20; // 20 seconds
+const BREATHING_FRAME_RATE_DEFAULT: u32 = 10000; // 10 Hz (factor 1000)
+const BREATHING_SWEEPS_PER_FRAME_DEFAULT: u32 = 16; // 16 sweeps
+const BREATHING_HWAAS_DEFAULT: u32 = 32; // Hardware accelerated average samples
+const BREATHING_PROFILE_DEFAULT: u32 = 3; // Profile 3 (REF_APP_BREATHING_REG_PROFILE_ENUM_PROFILE3)
+const BREATHING_INTRA_DETECTION_THRESHOLD_DEFAULT: u32 = 6000; // 6.0 threshold (factor 1000)
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum DetectorMode {
     Distance,
     Presence,
     Combined,
+    Breathing,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -131,6 +325,47 @@ pub struct PresenceMeasurement {
 pub struct CombinedMeasurement {
     pub distance: Option<DistanceMeasurement>,
     pub presence: Option<PresenceMeasurement>,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum BreathingAppState {
+    Init,
+    NoPresence,
+    IntraPresence,
+    DetermineDistance,
+    EstimateBreathingRate,
+}
+
+impl BreathingAppState {
+    fn from_u32(value: u32) -> Self {
+        match value {
+            0 => Self::Init,
+            1 => Self::NoPresence,
+            2 => Self::IntraPresence,
+            3 => Self::DetermineDistance,
+            4 => Self::EstimateBreathingRate,
+            _ => Self::Init, // Default fallback
+        }
+    }
+
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Self::Init => "Initializing",
+            Self::NoPresence => "No Presence",
+            Self::IntraPresence => "Presence Detected",
+            Self::DetermineDistance => "Determining Distance",
+            Self::EstimateBreathingRate => "Estimating Breathing Rate",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BreathingMeasurement {
+    pub result_ready: bool,
+    pub breathing_rate: f32, // BPM (breaths per minute)
+    pub app_state: BreathingAppState,
+    pub temperature: i16, // Temperature in Celsius
     pub timestamp: chrono::DateTime<chrono::Utc>,
 }
 
@@ -165,11 +400,11 @@ impl Default for XM125Config {
     fn default() -> Self {
         Self {
             detector_mode: DetectorMode::Distance,
-            start_m: 0.18,              // 18 cm minimum distance
-            length_m: 3.0,              // 3 meter range
-            max_step_length: 24,        // Good balance of accuracy/speed
-            max_profile: 3,             // Profile 3 for medium range
-            threshold_sensitivity: 0.5, // Medium sensitivity
+            start_m: 0.10,  // 10 cm minimum distance (closer than Acconeer default)
+            length_m: 2.90, // 2.90m range (end at 3.0m total)
+            max_step_length: 24, // Good balance of accuracy/speed
+            max_profile: 5, // Profile 5 (Acconeer default for distance)
+            threshold_sensitivity: 0.1, // High sensitivity (more sensitive than Acconeer default)
             // Presence detection defaults
             presence_range: PresenceRange::Long,
             intra_detection_threshold: 1.3,
@@ -299,34 +534,140 @@ impl XM125Radar {
     }
 
     pub async fn calibrate(&mut self) -> Result<()> {
-        info!("Starting XM125 calibration...");
+        info!("Starting XM125 calibration with proper configuration sequence...");
 
-        // Send calibration command
+        // Step 1: Check initial status - verify no Busy or Error bits
+        let initial_status = self.get_status_raw()?;
+        if initial_status & STATUS_BUSY != 0 {
+            return Err(RadarError::DeviceError {
+                message: "XM125 is busy - cannot start calibration".to_string(),
+            });
+        }
+        if initial_status & STATUS_ALL_ERROR_MASK != 0 {
+            return Err(RadarError::DeviceError {
+                message: format!(
+                    "XM125 has error flags before calibration: 0x{:08X}",
+                    initial_status
+                ),
+            });
+        }
+
+        // Step 2: Write configuration to Start and End registers for distance detector
+        if matches!(
+            self.config.detector_mode,
+            DetectorMode::Distance | DetectorMode::Combined
+        ) {
+            info!(
+                "Configuring distance detection range: {:.2}m to {:.2}m",
+                self.config.start_m,
+                self.config.start_m + self.config.length_m
+            );
+
+            let start_mm = (self.config.start_m * 1000.0) as u32;
+            let end_mm = ((self.config.start_m + self.config.length_m) * 1000.0) as u32;
+
+            debug!("Writing Start register: {}mm", start_mm);
+            let start_bytes = start_mm.to_le_bytes();
+            self.i2c.write_register(REG_START_CONFIG, &start_bytes)?;
+
+            debug!("Writing End register: {}mm", end_mm);
+            let end_bytes = end_mm.to_le_bytes();
+            self.i2c.write_register(REG_END_CONFIG, &end_bytes)?;
+
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        // Step 3: Send APPLY_CONFIG_AND_CALIBRATE command
+        info!("Sending APPLY_CONFIG_AND_CALIBRATE command...");
         self.send_command(CMD_APPLY_CONFIG_AND_CALIBRATE)?;
 
-        // Wait for calibration to complete
+        // Step 4: Poll Detector Status until Busy bit is cleared
+        info!("Waiting for calibration to complete...");
         let start_time = Instant::now();
+
         loop {
+            tokio::time::sleep(Duration::from_millis(50)).await; // Poll every 50ms
             let status = self.get_status_raw()?;
 
-            if status & STATUS_CALIBRATION_DONE != 0 {
+            if status & STATUS_BUSY != 0 {
+                debug!("Calibration in progress... (status: 0x{:08X})", status);
+                if start_time.elapsed() > CALIBRATION_TIMEOUT {
+                    return Err(RadarError::Timeout { timeout: 2 });
+                }
+                continue;
+            }
+
+            // Busy bit cleared - check for errors
+            if status & STATUS_ALL_ERROR_MASK != 0 {
+                let mut error_details = Vec::new();
+                if status & STATUS_SENSOR_CALIBRATE_ERROR != 0 {
+                    error_details.push("Sensor calibration failed");
+                }
+                if status & STATUS_DETECTOR_CALIBRATE_ERROR != 0 {
+                    error_details.push("Detector calibration failed");
+                }
+                if status & STATUS_CONFIG_CREATE_ERROR != 0 {
+                    error_details.push("Configuration creation failed");
+                }
+                if status & STATUS_SENSOR_CREATE_ERROR != 0 {
+                    error_details.push("Sensor creation failed");
+                }
+                if status & STATUS_DETECTOR_CREATE_ERROR != 0 {
+                    error_details.push("Detector creation failed");
+                }
+                if status & STATUS_CONFIG_APPLY_ERROR != 0 {
+                    error_details.push("Configuration apply failed");
+                }
+
+                return Err(RadarError::DeviceError {
+                    message: format!(
+                        "Calibration failed: {} (status: 0x{:08X})",
+                        error_details.join(", "),
+                        status
+                    ),
+                });
+            }
+
+            // Check if calibration completed successfully
+            if (status & STATUS_SENSOR_CALIBRATE_OK) != 0
+                && (status & STATUS_DETECTOR_CREATE_OK) != 0
+            {
                 self.is_calibrated = true;
                 self.last_calibration = Some(Instant::now());
-                info!("XM125 calibration completed successfully");
+                info!(
+                    "XM125 calibration completed successfully (status: 0x{:08X})",
+                    status
+                );
                 return Ok(());
             }
 
-            if status & STATUS_ERROR != 0 {
-                return Err(RadarError::DeviceError {
-                    message: "Calibration failed - device error".to_string(),
-                });
+            // Check progress - log which steps have completed
+            let mut progress = Vec::new();
+            if status & STATUS_RSS_REGISTER_OK != 0 {
+                progress.push("RSS");
             }
+            if status & STATUS_CONFIG_CREATE_OK != 0 {
+                progress.push("Config");
+            }
+            if status & STATUS_SENSOR_CREATE_OK != 0 {
+                progress.push("Sensor");
+            }
+            if status & STATUS_DETECTOR_CREATE_OK != 0 {
+                progress.push("Detector");
+            }
+            if status & STATUS_CONFIG_APPLY_OK != 0 {
+                progress.push("Applied");
+            }
+
+            debug!(
+                "Calibration progress: {} (status: 0x{:08X})",
+                progress.join(", "),
+                status
+            );
 
             if start_time.elapsed() > CALIBRATION_TIMEOUT {
                 return Err(RadarError::Timeout { timeout: 2 });
             }
-
-            tokio::time::sleep(Duration::from_millis(100)).await;
         }
     }
 
@@ -378,7 +719,7 @@ impl XM125Radar {
         }
 
         // Read measurement result
-        self.read_distance_result()
+        self.read_distance_result().await
     }
 
     fn get_status_raw(&mut self) -> Result<u32> {
@@ -409,33 +750,163 @@ impl XM125Radar {
         Ok(())
     }
 
-    fn read_distance_result(&mut self) -> Result<DistanceMeasurement> {
-        // Read distance result (assuming 16 bytes: distance, strength, temp, etc.)
-        let result_data = self.i2c.read_register(REG_DISTANCE_RESULT, 16)?;
+    async fn read_distance_result(&mut self) -> Result<DistanceMeasurement> {
+        // Loop to handle calibration if needed
+        loop {
+            // Read distance result register (4 bytes packed format)
+            let result_data = self.i2c.read_register(REG_DISTANCE_RESULT, 4)?;
+            let result_value = u32::from_be_bytes([
+                result_data[0],
+                result_data[1],
+                result_data[2],
+                result_data[3],
+            ]);
 
-        // Parse the result data (this format would need to match actual XM125 output)
-        let distance_mm = u32::from_be_bytes([
+            // Parse packed result format according to distance_reg_protocol.h
+            let num_distances = result_value & 0x0000000F; // Bits 0-3
+            let near_start_edge = (result_value & 0x00000100) != 0; // Bit 8
+            let calibration_needed = (result_value & 0x00000200) != 0; // Bit 9
+            let measure_error = (result_value & 0x00000400) != 0; // Bit 10
+            let temperature_raw = (result_value & 0xFFFF0000) >> 16; // Bits 16-31
+
+            debug!(
+                "Distance result: num_distances={}, near_edge={}, cal_needed={}, error={}",
+                num_distances, near_start_edge, calibration_needed, measure_error
+            );
+
+            if measure_error {
+                debug!("Distance measurement error flag set - may indicate no objects detected");
+                // Note: This error flag can be set when no objects are detected, which is normal
+                // We'll continue processing but log it for debugging
+            }
+
+            if calibration_needed {
+                warn!("Distance detector indicates calibration needed - triggering recalibration");
+                // Trigger recalibration when needed
+                self.calibrate().await?;
+                // Continue loop to re-read result after calibration
+                continue;
+            }
+
+            // Read peak 0 distance and strength (primary measurement)
+            let peak0_distance_data = self.i2c.read_register(REG_PEAK0_DISTANCE, 4)?;
+            let peak0_distance_mm = u32::from_be_bytes([
+                peak0_distance_data[0],
+                peak0_distance_data[1],
+                peak0_distance_data[2],
+                peak0_distance_data[3],
+            ]);
+
+            let peak0_strength_data = self.i2c.read_register(REG_PEAK0_STRENGTH, 4)?;
+            let peak0_strength_raw = u32::from_be_bytes([
+                peak0_strength_data[0],
+                peak0_strength_data[1],
+                peak0_strength_data[2],
+                peak0_strength_data[3],
+            ]);
+
+            // Convert to proper units (values are factor 1000 larger than RSS values)
+            #[allow(clippy::cast_precision_loss)]
+            // Converting mm to meters, precision loss acceptable
+            let distance = if num_distances > 0 {
+                (peak0_distance_mm as f32) / 1000.0 // Convert mm to meters
+            } else {
+                0.0 // No distance detected
+            };
+
+            #[allow(clippy::cast_precision_loss)] // Converting strength, precision loss acceptable
+            let strength = (peak0_strength_raw as f32) / 1000.0; // Convert to proper strength units
+
+            // Convert temperature (signed 16-bit value)
+            #[allow(clippy::cast_possible_wrap)] // Temperature conversion
+            let temperature = temperature_raw as i16;
+
+            debug!(
+                "Parsed distance: {:.2}m, strength: {:.1}, temp: {}°C, peaks: {}",
+                distance, strength, temperature, num_distances
+            );
+
+            self.last_measurement = Some(Instant::now());
+
+            return Ok(DistanceMeasurement {
+                distance,
+                strength,
+                temperature,
+                timestamp: chrono::Utc::now(),
+            });
+        }
+    }
+
+    /// Measure breathing patterns
+    pub async fn measure_breathing(&mut self) -> Result<BreathingMeasurement> {
+        // Auto-connect if not connected and auto-reconnect is enabled
+        if !self.is_connected && self.config.auto_reconnect {
+            info!("Auto-connecting for breathing measurement...");
+            self.auto_connect().await?;
+        }
+
+        // Start breathing application
+        self.send_command(CMD_BREATHING_START_APP)?;
+
+        // Wait for measurement to complete
+        let start_time = Instant::now();
+        while start_time.elapsed() < MEASUREMENT_TIMEOUT {
+            let status = self.get_status_raw()?;
+            if (status & STATUS_BUSY) == 0 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        // Read breathing result register (16/0x10)
+        let result_data = self.i2c.read_register(REG_BREATHING_RESULT, 4)?;
+        let result_value = u32::from_be_bytes([
             result_data[0],
             result_data[1],
             result_data[2],
             result_data[3],
         ]);
-        let strength_raw = u32::from_be_bytes([
-            result_data[4],
-            result_data[5],
-            result_data[6],
-            result_data[7],
-        ]);
-        let temperature = i16::from_be_bytes([result_data[8], result_data[9]]);
 
-        #[allow(clippy::cast_precision_loss)] // Converting mm to meters, precision loss acceptable
-        let distance = distance_mm as f32 / 1000.0; // Convert mm to meters
-        #[allow(clippy::cast_precision_loss)] // Converting to dB, precision loss acceptable
-        let strength = (strength_raw as f32) / 100.0; // Convert to dB (assuming 0.01 dB resolution)
+        // Parse breathing result format
+        let result_ready = (result_value & 0x00000001) != 0; // Bit 0: RESULT_READY
+        let result_ready_sticky = (result_value & 0x00000002) != 0; // Bit 1: RESULT_READY_STICKY
+        let temperature_raw = (result_value & 0xFFFF0000) >> 16; // Bits 16-31: TEMPERATURE
 
-        Ok(DistanceMeasurement {
-            distance,
-            strength,
+        debug!(
+            "Breathing result: ready={}, sticky={}, temp_raw=0x{:04X}",
+            result_ready, result_ready_sticky, temperature_raw
+        );
+
+        // Read breathing rate register (17/0x11)
+        let rate_data = self.i2c.read_register(REG_BREATHING_RATE, 4)?;
+        let rate_raw = u32::from_be_bytes([rate_data[0], rate_data[1], rate_data[2], rate_data[3]]);
+
+        // Read app state register (18/0x12)
+        let state_data = self.i2c.read_register(REG_BREATHING_APP_STATE, 4)?;
+        let state_raw =
+            u32::from_be_bytes([state_data[0], state_data[1], state_data[2], state_data[3]]);
+
+        // Convert values to proper units
+        #[allow(clippy::cast_precision_loss)]
+        // Converting breathing rate, precision loss acceptable
+        let breathing_rate = (rate_raw as f32) / 1000.0; // Factor 1000 larger than RSS value
+        let app_state = BreathingAppState::from_u32(state_raw);
+
+        // Convert temperature (signed 16-bit value)
+        #[allow(clippy::cast_possible_wrap)] // Temperature conversion
+        let temperature = temperature_raw as i16;
+
+        debug!(
+            "Parsed breathing: rate={:.2} BPM, state={:?}, temp={}°C",
+            breathing_rate, app_state, temperature
+        );
+
+        self.last_measurement = Some(Instant::now());
+
+        Ok(BreathingMeasurement {
+            result_ready,
+            breathing_rate,
+            app_state,
             temperature,
             timestamp: chrono::Utc::now(),
         })
@@ -486,6 +957,17 @@ impl XM125Radar {
                     "  Detection Sensitivity: {:.1} (0.1=low, 0.5=medium, 2.0=high)",
                     self.config.threshold_sensitivity
                 );
+            }
+            DetectorMode::Breathing => {
+                let end_range = self.config.start_m + self.config.length_m;
+                info!(
+                    "  Breathing Range: {:.2}m - {:.2}m (length: {:.2}m)",
+                    self.config.start_m, end_range, self.config.length_m
+                );
+                info!("  Expected Breathing Rate: 6-60 BPM");
+                info!("  Frame Rate: {:.1} Hz", self.config.frame_rate);
+                info!("  Analysis Duration: 5s (distance determination)");
+                info!("  Time Series Length: 20s (breathing estimation)");
             }
         }
 
@@ -571,16 +1053,25 @@ impl XM125Radar {
 
         match self.config.detector_mode {
             DetectorMode::Distance => {
-                self.send_command(CMD_ENABLE_DETECTOR)?;
+                // Write distance detector configuration registers
+                self.write_distance_configuration().await?;
+                self.send_command(CMD_APPLY_CONFIG_AND_CALIBRATE)?;
             }
             DetectorMode::Presence => {
                 self.send_command(CMD_ENABLE_PRESENCE_DETECTOR)?;
                 self.configure_presence_range();
             }
             DetectorMode::Combined => {
-                self.send_command(CMD_ENABLE_DETECTOR)?;
+                // Write distance detector configuration registers
+                self.write_distance_configuration().await?;
+                self.send_command(CMD_APPLY_CONFIG_AND_CALIBRATE)?;
                 self.send_command(CMD_ENABLE_PRESENCE_DETECTOR)?;
                 self.configure_presence_range();
+            }
+            DetectorMode::Breathing => {
+                // Write breathing detector configuration registers
+                self.write_breathing_configuration().await?;
+                self.send_command(CMD_BREATHING_APPLY_CONFIGURATION)?;
             }
         }
 
@@ -642,6 +1133,256 @@ impl XM125Radar {
         // self.i2c.write_register(REG_INTRA_DETECTION_THRESHOLD, &intra_threshold.to_be_bytes())?;
         // self.i2c.write_register(REG_INTER_DETECTION_THRESHOLD, &inter_threshold.to_be_bytes())?;
         // self.i2c.write_register(REG_FRAME_RATE, &frame_rate.to_be_bytes())?;
+    }
+
+    /// Write distance detector configuration registers
+    async fn write_distance_configuration(&mut self) -> Result<()> {
+        info!("Writing distance detector configuration registers");
+
+        // Convert config values to device units
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        // Values are always positive and within u32 range
+        let start_mm = (self.config.start_m * 1000.0) as u32;
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        // Values are always positive and within u32 range
+        let end_mm = ((self.config.start_m + self.config.length_m) * 1000.0) as u32;
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        // Values are always positive and within u32 range
+        let sensitivity = (self.config.threshold_sensitivity * 1000.0) as u32;
+
+        // Use defaults for advanced parameters, but allow customization via config
+        let start_value = if start_mm > 0 {
+            start_mm
+        } else {
+            DISTANCE_START_DEFAULT
+        };
+        let end_value = if end_mm > start_value {
+            end_mm
+        } else {
+            DISTANCE_END_DEFAULT
+        };
+        let sensitivity_value = if sensitivity > 0 {
+            sensitivity
+        } else {
+            DISTANCE_THRESHOLD_SENSITIVITY_DEFAULT
+        };
+
+        info!("Distance detector configuration:");
+        info!(
+            "  Range: {}mm - {}mm ({:.2}m - {:.2}m)",
+            start_value,
+            end_value,
+            start_value as f32 / 1000.0,
+            end_value as f32 / 1000.0
+        );
+        info!("  Sensitivity: {} (factor 1000)", sensitivity_value);
+        info!(
+            "  Profile: {} (Profile {})",
+            DISTANCE_MAX_PROFILE_DEFAULT, DISTANCE_MAX_PROFILE_DEFAULT
+        );
+
+        // Write essential configuration registers
+        self.i2c
+            .write_register(REG_START_CONFIG, &start_value.to_be_bytes())?;
+        debug!(
+            "Wrote start range: {}mm to register 0x{:04X}",
+            start_value, REG_START_CONFIG
+        );
+
+        self.i2c
+            .write_register(REG_END_CONFIG, &end_value.to_be_bytes())?;
+        debug!(
+            "Wrote end range: {}mm to register 0x{:04X}",
+            end_value, REG_END_CONFIG
+        );
+
+        self.i2c
+            .write_register(REG_THRESHOLD_SENSITIVITY, &sensitivity_value.to_be_bytes())?;
+        debug!(
+            "Wrote sensitivity: {} to register 0x{:04X}",
+            sensitivity_value, REG_THRESHOLD_SENSITIVITY
+        );
+
+        self.i2c
+            .write_register(REG_MAX_PROFILE, &DISTANCE_MAX_PROFILE_DEFAULT.to_be_bytes())?;
+        debug!(
+            "Wrote profile: {} to register 0x{:04X}",
+            DISTANCE_MAX_PROFILE_DEFAULT, REG_MAX_PROFILE
+        );
+
+        // Write advanced configuration with defaults
+        self.i2c.write_register(
+            REG_MAX_STEP_LENGTH,
+            &DISTANCE_MAX_STEP_LENGTH_DEFAULT.to_be_bytes(),
+        )?;
+        self.i2c.write_register(
+            REG_CLOSE_RANGE_LEAKAGE_CANCELLATION,
+            &DISTANCE_CLOSE_RANGE_LEAKAGE_CANCELLATION_DEFAULT.to_be_bytes(),
+        )?;
+        self.i2c.write_register(
+            REG_SIGNAL_QUALITY,
+            &DISTANCE_SIGNAL_QUALITY_DEFAULT.to_be_bytes(),
+        )?;
+        self.i2c.write_register(
+            REG_THRESHOLD_METHOD,
+            &DISTANCE_THRESHOLD_METHOD_DEFAULT.to_be_bytes(),
+        )?;
+        self.i2c.write_register(
+            REG_PEAK_SORTING,
+            &DISTANCE_PEAK_SORTING_DEFAULT.to_be_bytes(),
+        )?;
+        self.i2c.write_register(
+            REG_NUM_FRAMES_RECORDED_THRESHOLD,
+            &DISTANCE_NUM_FRAMES_RECORDED_THRESHOLD_DEFAULT.to_be_bytes(),
+        )?;
+        self.i2c.write_register(
+            REG_FIXED_AMPLITUDE_THRESHOLD_VALUE,
+            &DISTANCE_FIXED_AMPLITUDE_THRESHOLD_VALUE_DEFAULT.to_be_bytes(),
+        )?;
+        self.i2c.write_register(
+            REG_REFLECTOR_SHAPE,
+            &DISTANCE_REFLECTOR_SHAPE_DEFAULT.to_be_bytes(),
+        )?;
+        self.i2c.write_register(
+            REG_FIXED_STRENGTH_THRESHOLD_VALUE,
+            &DISTANCE_FIXED_STRENGTH_THRESHOLD_VALUE_DEFAULT.to_be_bytes(),
+        )?;
+
+        info!("Distance detector configuration written successfully");
+        Ok(())
+    }
+
+    /// Write breathing detector configuration registers
+    async fn write_breathing_configuration(&mut self) -> Result<()> {
+        info!("Writing breathing detector configuration registers");
+
+        // Convert config values to device units
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        // Values are always positive and within u32 range
+        let start_mm = (self.config.start_m * 1000.0) as u32;
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        // Values are always positive and within u32 range
+        let end_mm = ((self.config.start_m + self.config.length_m) * 1000.0) as u32;
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        // Values are always positive and within u32 range
+        let frame_rate = (self.config.frame_rate * 1000.0) as u32; // Convert to milliHz
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        // Values are always positive and within u32 range
+        let intra_threshold = (self.config.intra_detection_threshold * 1000.0) as u32;
+
+        // Use defaults for advanced parameters, but allow customization via config
+        let start_value = if start_mm > 0 {
+            start_mm
+        } else {
+            BREATHING_START_DEFAULT
+        };
+        let end_value = if end_mm > start_value {
+            end_mm
+        } else {
+            BREATHING_END_DEFAULT
+        };
+        let frame_rate_value = if frame_rate > 0 {
+            frame_rate
+        } else {
+            BREATHING_FRAME_RATE_DEFAULT
+        };
+        let intra_threshold_value = if intra_threshold > 0 {
+            intra_threshold
+        } else {
+            BREATHING_INTRA_DETECTION_THRESHOLD_DEFAULT
+        };
+
+        info!("Breathing detector configuration:");
+        info!(
+            "  Range: {}mm - {}mm ({:.2}m - {:.2}m)",
+            start_value,
+            end_value,
+            start_value as f32 / 1000.0,
+            end_value as f32 / 1000.0
+        );
+        info!(
+            "  Frame Rate: {} milliHz ({:.1} Hz)",
+            frame_rate_value,
+            frame_rate_value as f32 / 1000.0
+        );
+        info!(
+            "  Breathing Rate Range: {}-{} BPM",
+            BREATHING_LOWEST_BREATHING_RATE_DEFAULT, BREATHING_HIGHEST_BREATHING_RATE_DEFAULT
+        );
+        info!(
+            "  Profile: {} (Profile {})",
+            BREATHING_PROFILE_DEFAULT, BREATHING_PROFILE_DEFAULT
+        );
+
+        // Write essential configuration registers
+        self.i2c
+            .write_register(REG_BREATHING_START, &start_value.to_be_bytes())?;
+        debug!(
+            "Wrote breathing start: {}mm to register 0x{:04X}",
+            start_value, REG_BREATHING_START
+        );
+
+        self.i2c
+            .write_register(REG_BREATHING_END, &end_value.to_be_bytes())?;
+        debug!(
+            "Wrote breathing end: {}mm to register 0x{:04X}",
+            end_value, REG_BREATHING_END
+        );
+
+        self.i2c
+            .write_register(REG_BREATHING_FRAME_RATE, &frame_rate_value.to_be_bytes())?;
+        debug!(
+            "Wrote frame rate: {} milliHz to register 0x{:04X}",
+            frame_rate_value, REG_BREATHING_FRAME_RATE
+        );
+
+        self.i2c.write_register(
+            REG_BREATHING_INTRA_DETECTION_THRESHOLD,
+            &intra_threshold_value.to_be_bytes(),
+        )?;
+        debug!(
+            "Wrote intra threshold: {} to register 0x{:04X}",
+            intra_threshold_value, REG_BREATHING_INTRA_DETECTION_THRESHOLD
+        );
+
+        // Write advanced configuration with defaults
+        self.i2c.write_register(
+            REG_BREATHING_NUM_DISTANCES_TO_ANALYZE,
+            &BREATHING_NUM_DISTANCES_TO_ANALYZE_DEFAULT.to_be_bytes(),
+        )?;
+        self.i2c.write_register(
+            REG_BREATHING_DISTANCE_DETERMINATION_DURATION_S,
+            &BREATHING_DISTANCE_DETERMINATION_DURATION_S_DEFAULT.to_be_bytes(),
+        )?;
+        self.i2c.write_register(
+            REG_BREATHING_USE_PRESENCE_PROCESSOR,
+            &BREATHING_USE_PRESENCE_PROCESSOR_DEFAULT.to_be_bytes(),
+        )?;
+        self.i2c.write_register(
+            REG_BREATHING_LOWEST_BREATHING_RATE,
+            &BREATHING_LOWEST_BREATHING_RATE_DEFAULT.to_be_bytes(),
+        )?;
+        self.i2c.write_register(
+            REG_BREATHING_HIGHEST_BREATHING_RATE,
+            &BREATHING_HIGHEST_BREATHING_RATE_DEFAULT.to_be_bytes(),
+        )?;
+        self.i2c.write_register(
+            REG_BREATHING_TIME_SERIES_LENGTH_S,
+            &BREATHING_TIME_SERIES_LENGTH_S_DEFAULT.to_be_bytes(),
+        )?;
+        self.i2c.write_register(
+            REG_BREATHING_SWEEPS_PER_FRAME,
+            &BREATHING_SWEEPS_PER_FRAME_DEFAULT.to_be_bytes(),
+        )?;
+        self.i2c
+            .write_register(REG_BREATHING_HWAAS, &BREATHING_HWAAS_DEFAULT.to_be_bytes())?;
+        self.i2c.write_register(
+            REG_BREATHING_PROFILE,
+            &BREATHING_PROFILE_DEFAULT.to_be_bytes(),
+        )?;
+
+        info!("Breathing detector configuration written successfully");
+        Ok(())
     }
 
     /// Wait for calibration to complete

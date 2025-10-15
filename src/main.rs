@@ -58,6 +58,7 @@ async fn main() {
             cli::DetectorMode::Distance => "Distance",
             cli::DetectorMode::Presence => "Presence",
             cli::DetectorMode::Combined => "Combined",
+            cli::DetectorMode::Breathing => "Breathing",
         };
         println!(
             "Mode: {} | I2C: /dev/i2c-{} @ 0x{:02X} | Auto-reconnect: {}",
@@ -276,6 +277,17 @@ async fn execute_command(
             let response = response_parts.join(" | ");
             output_response(cli, "combined", &response, "🎯", "Combined Detection")?;
         }
+        Commands::Breathing => {
+            let result = radar.measure_breathing().await?;
+            let response = format!(
+                "State: {}, Rate: {:.1} BPM, Ready: {}, Temperature: {}°C",
+                result.app_state.display_name(),
+                result.breathing_rate,
+                if result.result_ready { "YES" } else { "NO" },
+                result.temperature
+            );
+            output_response(cli, "breathing", &response, "🫁", "Breathing Detection")?;
+        }
         Commands::Config {
             start,
             length,
@@ -467,6 +479,46 @@ async fn monitor_measurements(
                     }
                 }
             }
+            cli::DetectorMode::Breathing => {
+                let result = radar.measure_breathing().await?;
+                match cli.format {
+                    cli::OutputFormat::Human => {
+                        println!(
+                            "[{}] State: {} | Rate: {:.1} BPM | Ready: {} | Temp: {}°C",
+                            chrono::Utc::now().format("%H:%M:%S"),
+                            result.app_state.display_name(),
+                            result.breathing_rate,
+                            if result.result_ready { "YES" } else { "NO" },
+                            result.temperature
+                        );
+                    }
+                    cli::OutputFormat::Json => {
+                        let json_response = serde_json::json!({
+                            "timestamp": chrono::Utc::now().to_rfc3339(),
+                            "app_state": result.app_state.display_name(),
+                            "breathing_rate_bpm": result.breathing_rate,
+                            "result_ready": result.result_ready,
+                            "temperature_c": result.temperature,
+                            "measurement_count": measurement_count
+                        });
+                        println!("{}", serde_json::to_string(&json_response)?);
+                    }
+                    cli::OutputFormat::Csv => {
+                        if measurement_count == 0 {
+                            println!("timestamp,app_state,breathing_rate_bpm,result_ready,temperature_c,measurement_count");
+                        }
+                        println!(
+                            "{},{},{:.1},{},{},{}",
+                            chrono::Utc::now().to_rfc3339(),
+                            result.app_state.display_name(),
+                            result.breathing_rate,
+                            if result.result_ready { "1" } else { "0" },
+                            result.temperature,
+                            measurement_count
+                        );
+                    }
+                }
+            }
         }
 
         measurement_count += 1;
@@ -532,6 +584,7 @@ async fn configure_radar_from_cli(
         cli::DetectorMode::Distance => radar::DetectorMode::Distance,
         cli::DetectorMode::Presence => radar::DetectorMode::Presence,
         cli::DetectorMode::Combined => radar::DetectorMode::Combined,
+        cli::DetectorMode::Breathing => radar::DetectorMode::Breathing,
     };
 
     radar.set_detector_mode(detector_mode).await?;
