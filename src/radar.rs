@@ -166,7 +166,7 @@ impl Default for XM125Config {
             max_profile: 3,             // Profile 3 for medium range
             threshold_sensitivity: 0.5, // Medium sensitivity
             // Presence detection defaults
-            presence_range: PresenceRange::Medium,
+            presence_range: PresenceRange::Long,
             intra_detection_threshold: 1.3,
             inter_detection_threshold: 1.0,
             frame_rate: 12.0,
