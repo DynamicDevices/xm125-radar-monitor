@@ -397,6 +397,19 @@ impl XM125Radar {
                     info!("Successfully connected to XM125 on attempt {attempt}");
                     return Ok(());
                 }
+                Err(RadarError::NotConnected) if attempt == 1 => {
+                    // First connection failure - try resetting XM125 to run mode
+                    warn!(
+                        "XM125 not detected on I2C bus, attempting hardware reset to run mode..."
+                    );
+                    if let Err(reset_err) = self.reset_xm125_to_run_mode() {
+                        warn!("Failed to reset XM125: {reset_err}");
+                    } else {
+                        info!("XM125 reset completed, retrying connection...");
+                        // Give the module time to initialize after reset
+                        tokio::time::sleep(Duration::from_millis(1000)).await;
+                    }
+                }
                 Err(e) => {
                     if attempt < MAX_RETRIES {
                         warn!("Connection attempt {attempt} failed: {e}. Retrying...");
@@ -666,6 +679,35 @@ impl XM125Radar {
     #[allow(dead_code)] // Reserved for configuration queries
     pub fn get_detector_mode(&self) -> DetectorMode {
         self.config.detector_mode
+    }
+
+    /// Reset XM125 to run mode using the control script
+    #[allow(clippy::uninlined_format_args)] // Allow for error message formatting
+    #[allow(clippy::unused_self)] // Self needed for future enhancements
+    fn reset_xm125_to_run_mode(&self) -> Result<()> {
+        use std::process::Command;
+
+        info!("Executing XM125 reset to run mode...");
+
+        let output = Command::new("/home/fio/xm125-control.sh")
+            .arg("--reset-run")
+            .output()
+            .map_err(|e| RadarError::DeviceError {
+                message: format!("Failed to execute xm125-control.sh: {}", e),
+            })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(RadarError::DeviceError {
+                message: format!("XM125 reset script failed: {}", stderr),
+            });
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        debug!("XM125 reset output: {}", stdout);
+
+        info!("XM125 hardware reset to run mode completed");
+        Ok(())
     }
 
     /// Check if radar is connected

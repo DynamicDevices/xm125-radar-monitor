@@ -101,6 +101,7 @@ impl I2cDevice {
     }
 
     /// Configure GPIO pins for XM125 hardware control
+    #[allow(clippy::uninlined_format_args)] // Allow for GPIO path formatting
     pub fn configure_gpio(&mut self, wakeup_pin: Option<u32>, int_pin: Option<u32>) -> Result<()> {
         if let Some(pin) = wakeup_pin {
             // Check if GPIO is already exported by system control
@@ -131,6 +132,8 @@ impl I2cDevice {
 
     /// Wake up the XM125 module using hardware pins
     #[allow(dead_code)] // Reserved for hardware control
+    #[allow(clippy::unnecessary_wraps)] // May return errors in future versions
+    #[allow(clippy::uninlined_format_args)] // Allow for GPIO path formatting
     pub fn wake_up_module(&self) -> Result<()> {
         let Some(wakeup_pin) = self.wakeup_pin else {
             debug!("No WAKEUP pin configured, assuming hardware is already initialized");
@@ -197,6 +200,8 @@ impl I2cDevice {
 
     /// Put the XM125 module into low power mode
     #[allow(dead_code)] // Reserved for hardware control
+    #[allow(clippy::unnecessary_wraps)] // May return errors in future versions
+    #[allow(clippy::uninlined_format_args)] // Allow for GPIO path formatting
     pub fn sleep_module(&self) -> Result<()> {
         let Some(wakeup_pin) = self.wakeup_pin else {
             debug!("No WAKEUP pin configured, skipping hardware sleep");
@@ -244,6 +249,8 @@ impl I2cDevice {
 
     /// Check if the XM125 module is ready (INT pin HIGH)
     #[allow(dead_code)] // Reserved for hardware status checking
+    #[allow(clippy::unnecessary_wraps)] // May return errors in future versions
+    #[allow(clippy::uninlined_format_args)] // Allow for GPIO path formatting
     pub fn is_module_ready(&self) -> Result<bool> {
         if let Some(int_pin) = self.int_pin {
             Ok(self.read_gpio_value(int_pin)? == 1)
@@ -254,6 +261,8 @@ impl I2cDevice {
     }
 
     // GPIO helper functions
+    #[allow(clippy::unused_self)] // Self needed for consistency
+    #[allow(clippy::uninlined_format_args)] // Allow for GPIO path formatting
     fn export_gpio(&self, pin: u32) -> Result<()> {
         if let Err(e) = std::fs::write("/sys/class/gpio/export", pin.to_string()) {
             // GPIO might already be exported, check if it exists
@@ -264,6 +273,8 @@ impl I2cDevice {
         Ok(())
     }
 
+    #[allow(clippy::unused_self)] // Self needed for consistency
+    #[allow(clippy::uninlined_format_args)] // Allow for GPIO path formatting
     fn set_gpio_direction(&self, pin: u32, direction: &str) -> Result<()> {
         let path = format!("/sys/class/gpio/gpio{}/direction", pin);
         std::fs::write(&path, direction).map_err(RadarError::Io)?;
@@ -271,12 +282,16 @@ impl I2cDevice {
     }
 
     #[allow(dead_code)] // Reserved for hardware control
+    #[allow(clippy::unused_self)] // Self needed for consistency
+    #[allow(clippy::uninlined_format_args)] // Allow for GPIO path formatting
     fn set_gpio_value(&self, pin: u32, value: u8) -> Result<()> {
         let path = format!("/sys/class/gpio/gpio{}/value", pin);
         std::fs::write(&path, value.to_string()).map_err(RadarError::Io)?;
         Ok(())
     }
 
+    #[allow(clippy::unused_self)] // Self needed for consistency
+    #[allow(clippy::uninlined_format_args)] // Allow for GPIO path formatting
     fn read_gpio_value(&self, pin: u32) -> Result<u8> {
         let path = format!("/sys/class/gpio/gpio{}/value", pin);
         let mut content = String::new();
