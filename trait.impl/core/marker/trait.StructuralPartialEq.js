@@ -1,0 +1,9 @@
+(function() {
+    var implementors = Object.fromEntries([["xm125_radar_monitor",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.90.0/core/marker/trait.StructuralPartialEq.html\" title=\"trait core::marker::StructuralPartialEq\">StructuralPartialEq</a> for <a class=\"enum\" href=\"xm125_radar_monitor/firmware/enum.FirmwareType.html\" title=\"enum xm125_radar_monitor::firmware::FirmwareType\">FirmwareType</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.90.0/core/marker/trait.StructuralPartialEq.html\" title=\"trait core::marker::StructuralPartialEq\">StructuralPartialEq</a> for <a class=\"enum\" href=\"xm125_radar_monitor/radar/enum.DetectorMode.html\" title=\"enum xm125_radar_monitor::radar::DetectorMode\">DetectorMode</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.90.0/core/marker/trait.StructuralPartialEq.html\" title=\"trait core::marker::StructuralPartialEq\">StructuralPartialEq</a> for <a class=\"enum\" href=\"xm125_radar_monitor/radar/enum.PresenceRange.html\" title=\"enum xm125_radar_monitor::radar::PresenceRange\">PresenceRange</a>"]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":57,"fragment_lengths":[1054]}

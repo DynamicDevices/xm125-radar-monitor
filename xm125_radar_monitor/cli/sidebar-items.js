@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Commands","DetectorMode","FirmwareAction","FirmwareType","OutputFormat","PresenceRange"],"fn":["parse_i2c_address"],"struct":["Cli"]};

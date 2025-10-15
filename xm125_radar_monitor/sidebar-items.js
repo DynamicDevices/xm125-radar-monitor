@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["APP_NAME","VERSION"],"fn":["configure_detector","configure_radar_from_cli","execute_command","get_current_firmware_info","handle_firmware_command","main","monitor_measurements","output_response","run"],"mod":["cli","error","firmware","i2c","radar"]};
