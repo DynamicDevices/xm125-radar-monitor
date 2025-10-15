@@ -14,8 +14,7 @@ use std::time::{Duration, Instant};
 #[allow(clippy::unused_async)] // Some functions may become async in future
 #[allow(clippy::trivially_copy_pass_by_ref)] // Consistent API design
 #[allow(clippy::match_same_arms)] // Explicit fallback patterns for robustness
-
-// XM125 I2C Register Addresses (from distance_reg_protocol.h)
+                                  // XM125 I2C Register Addresses (from distance_reg_protocol.h)
 const REG_VERSION: u16 = 0; // DISTANCE_REG_VERSION_ADDRESS
 #[allow(dead_code)] // Reserved for protocol validation
 const REG_PROTOCOL_STATUS: u16 = 1; // DISTANCE_REG_PROTOCOL_STATUS_ADDRESS
