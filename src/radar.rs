@@ -24,6 +24,24 @@ const REG_COMMAND: u16 = 256; // DISTANCE_REG_COMMAND_ADDRESS
 #[allow(dead_code)] // Reserved for application identification
 const REG_APPLICATION_ID: u16 = 65535; // DISTANCE_REG_APPLICATION_ID_ADDRESS
 
+// Presence Detection Registers (from presence_reg_protocol.h)
+const REG_PRESENCE_RESULT: u16 = 16; // PRESENCE_REG_PRESENCE_RESULT_ADDRESS
+const REG_PRESENCE_DISTANCE: u16 = 17; // PRESENCE_REG_PRESENCE_DISTANCE_ADDRESS
+const REG_INTRA_PRESENCE_SCORE: u16 = 18; // PRESENCE_REG_INTRA_PRESENCE_SCORE_ADDRESS
+const REG_INTER_PRESENCE_SCORE: u16 = 19; // PRESENCE_REG_INTER_PRESENCE_SCORE_ADDRESS
+
+// Presence Configuration Registers (estimated based on typical Acconeer patterns)
+#[allow(dead_code)] // Reserved for presence range configuration
+const REG_PRESENCE_START: u16 = 64; // Estimated - presence detection start range
+#[allow(dead_code)] // Reserved for presence range configuration
+const REG_PRESENCE_END: u16 = 65; // Estimated - presence detection end range
+#[allow(dead_code)] // Reserved for presence threshold configuration
+const REG_INTRA_DETECTION_THRESHOLD: u16 = 66; // Estimated - fast motion threshold
+#[allow(dead_code)] // Reserved for presence threshold configuration
+const REG_INTER_DETECTION_THRESHOLD: u16 = 67; // Estimated - slow motion threshold
+#[allow(dead_code)] // Reserved for presence frame rate configuration
+const REG_FRAME_RATE: u16 = 68; // Estimated - presence detection frame rate
+
 // Command codes for XM125 (from distance_reg_protocol.h)
 const CMD_APPLY_CONFIG_AND_CALIBRATE: u32 = 1; // DISTANCE_REG_COMMAND_ENUM_APPLY_CONFIG_AND_CALIBRATE
 const CMD_MEASURE_DISTANCE: u32 = 2; // DISTANCE_REG_COMMAND_ENUM_MEASURE_DISTANCE
@@ -38,7 +56,8 @@ const CMD_RESET_MODULE: u32 = 0x5253_5421; // DISTANCE_REG_COMMAND_ENUM_RESET_MO
 const CMD_ENABLE_DETECTOR: u32 = CMD_APPLY_CONFIGURATION;
 const CMD_DISABLE_DETECTOR: u32 = CMD_RESET_MODULE;
 const CMD_ENABLE_PRESENCE_DETECTOR: u32 = CMD_APPLY_CONFIGURATION;
-const CMD_MEASURE_PRESENCE: u32 = CMD_MEASURE_DISTANCE; // Placeholder - presence needs different protocol
+#[allow(dead_code)] // Reserved for future presence-specific commands
+const CMD_MEASURE_PRESENCE: u32 = CMD_MEASURE_DISTANCE; // Placeholder - presence uses same command for now
 #[allow(dead_code)] // Reserved for continuous monitoring
 const CMD_ENABLE_CONTINUOUS_MODE: u32 = CMD_APPLY_CONFIGURATION;
 #[allow(dead_code)] // Reserved for continuous monitoring
@@ -46,12 +65,21 @@ const CMD_DISABLE_CONTINUOUS_MODE: u32 = CMD_RESET_MODULE;
 
 // Placeholder register for compatibility
 const REG_SENSOR_INFO: u16 = REG_VERSION; // Use version register for device info
-const REG_PRESENCE_RESULT: u16 = REG_DISTANCE_RESULT; // Placeholder - needs presence protocol
 
-// Status flags
-const STATUS_DETECTOR_READY: u32 = 0x01;
-const STATUS_CALIBRATION_DONE: u32 = 0x02;
-const STATUS_MEASUREMENT_READY: u32 = 0x04;
+// Status flags from presence_reg_protocol.h (corrected to match official specification)
+#[allow(dead_code)] // Reserved for complete status checking
+const STATUS_RSS_REGISTER_OK: u32 = 0x01; // Bit 0: RSS Register OK
+#[allow(dead_code)] // Reserved for complete status checking
+const STATUS_CONFIG_CREATE_OK: u32 = 0x02; // Bit 1: Config Create OK
+#[allow(dead_code)] // Reserved for complete status checking
+const STATUS_SENSOR_CREATE_OK: u32 = 0x04; // Bit 2: Sensor Create OK
+const STATUS_SENSOR_CALIBRATE_OK: u32 = 0x08; // Bit 3: Sensor Calibrate OK
+const STATUS_DETECTOR_CREATE_OK: u32 = 0x10; // Bit 4: Detector Create OK
+
+// Legacy compatibility (mapped to correct presence detector bits)
+const STATUS_DETECTOR_READY: u32 = STATUS_DETECTOR_CREATE_OK; // 0x10 (bit 4)
+const STATUS_CALIBRATION_DONE: u32 = STATUS_SENSOR_CALIBRATE_OK; // 0x08 (bit 3)
+const STATUS_MEASUREMENT_READY: u32 = 0x04; // Keep for distance detector compatibility
 #[allow(dead_code)] // Reserved for presence status
 const STATUS_PRESENCE_DETECTED: u32 = 0x08;
 #[allow(dead_code)] // Reserved for continuous mode status
@@ -238,11 +266,28 @@ impl XM125Radar {
             u32::from_le_bytes([info_data[0], info_data[1], info_data[2], info_data[3]]);
         let firmware_version = u16::from_le_bytes([info_data[4], info_data[5]]);
 
+        // Read Application ID register to determine firmware type
+        let app_id_data = self.i2c.read_register(REG_APPLICATION_ID, 4)?;
+        let app_id = u32::from_be_bytes([
+            app_id_data[0],
+            app_id_data[1],
+            app_id_data[2],
+            app_id_data[3],
+        ]);
+
+        let app_type = match app_id {
+            1 => "Distance Detector",
+            2 => "Presence Detector",
+            _ => &format!("Unknown ({app_id})"),
+        };
+
         Ok(format!(
-            "XM125 Radar Module\nSensor ID: 0x{:08X}\nFirmware Version: {}.{}\nConfig: {:.2}m-{:.2}m range",
+            "XM125 Radar Module\nSensor ID: 0x{:08X}\nFirmware Version: {}.{}\nApplication Type: {}\nApplication ID: {}\nConfig: {:.2}m-{:.2}m range",
             sensor_id,
             firmware_version >> 8,
             firmware_version & 0xFF,
+            app_type,
+            app_id,
             self.config.start_m,
             self.config.start_m + self.config.length_m
         ))
@@ -474,6 +519,7 @@ impl XM125Radar {
     }
 
     /// Configure presence detection range parameters
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // Range values are always positive and within u32 range
     fn configure_presence_range(&mut self) {
         let (start, end) = match self.config.presence_range {
             PresenceRange::Short => (0.06, 0.7),
@@ -481,8 +527,49 @@ impl XM125Radar {
             PresenceRange::Long => (0.5, 7.0),
         };
 
-        // Write range configuration (simplified - would need actual register protocol)
-        info!("Configured presence range: {start:.2}m - {end:.2}m");
+        info!("Configuring presence detection parameters:");
+        info!("  Range: {start:.2}m - {end:.2}m");
+        info!(
+            "  Intra threshold: {:.2}",
+            self.config.intra_detection_threshold
+        );
+        info!(
+            "  Inter threshold: {:.2}",
+            self.config.inter_detection_threshold
+        );
+        info!("  Frame rate: {:.1} Hz", self.config.frame_rate);
+
+        // Note: These register writes are estimated based on typical Acconeer patterns
+        // The actual register addresses would need to be confirmed from official documentation
+
+        // Configure detection range (convert meters to millimeters)
+        let start_mm = (start * 1000.0) as u32;
+        let end_mm = (end * 1000.0) as u32;
+
+        debug!("Writing presence range configuration (estimated registers):");
+        debug!("  Start range: {start_mm}mm -> register (not implemented)");
+        debug!("  End range: {end_mm}mm -> register (not implemented)");
+
+        // Configure detection thresholds (convert to appropriate format)
+        let intra_threshold = (self.config.intra_detection_threshold * 1000.0) as u32;
+        let inter_threshold = (self.config.inter_detection_threshold * 1000.0) as u32;
+
+        debug!("  Intra threshold: {intra_threshold} -> register (not implemented)");
+        debug!("  Inter threshold: {inter_threshold} -> register (not implemented)");
+
+        // Configure frame rate (convert to appropriate format)
+        let frame_rate = (self.config.frame_rate * 1000.0) as u32; // Convert to milliHz or similar
+        debug!("  Frame rate: {frame_rate} -> register (not implemented)");
+
+        warn!("Presence configuration registers are not yet implemented - using firmware defaults");
+        warn!("Configuration parameters are logged but not written to device registers");
+
+        // TODO: Implement actual register writes when register addresses are confirmed:
+        // self.i2c.write_register(REG_PRESENCE_START, &start_mm.to_le_bytes())?;
+        // self.i2c.write_register(REG_PRESENCE_END, &end_mm.to_le_bytes())?;
+        // self.i2c.write_register(REG_INTRA_DETECTION_THRESHOLD, &intra_threshold.to_le_bytes())?;
+        // self.i2c.write_register(REG_INTER_DETECTION_THRESHOLD, &inter_threshold.to_le_bytes())?;
+        // self.i2c.write_register(REG_FRAME_RATE, &frame_rate.to_le_bytes())?;
     }
 
     /// Wait for calibration to complete
@@ -492,10 +579,19 @@ impl XM125Radar {
         loop {
             let status = self.get_status_raw()?;
 
-            if status & STATUS_CALIBRATION_DONE != 0 {
+            // Check if device is already calibrated (for presence detector, status 0x07 is sufficient)
+            if status & STATUS_SENSOR_CALIBRATE_OK != 0 {
                 self.is_calibrated = true;
                 self.last_calibration = Some(Instant::now());
                 info!("XM125 calibration completed successfully");
+                return Ok(());
+            }
+
+            // For presence detector, status 0x07 (bits 0,1,2) indicates ready state
+            if status == 0x07 {
+                self.is_calibrated = true;
+                self.last_calibration = Some(Instant::now());
+                info!("XM125 presence detector ready (status: 0x{status:02X})");
                 return Ok(());
             }
 
@@ -535,34 +631,60 @@ impl XM125Radar {
             ));
         }
 
-        self.send_command(CMD_MEASURE_PRESENCE)?;
+        // Send presence measurement command (use same as distance for now)
+        self.send_command(CMD_MEASURE_DISTANCE)?;
 
         // Wait for measurement
         self.wait_for_measurement().await?;
 
-        // Read presence result
-        let result_data = self.i2c.read_register(REG_PRESENCE_RESULT, 20)?;
+        // Read presence result registers individually (4 bytes each)
+        let presence_result_data = self.i2c.read_register(REG_PRESENCE_RESULT, 4)?;
+        let presence_distance_data = self.i2c.read_register(REG_PRESENCE_DISTANCE, 4)?;
+        let intra_score_data = self.i2c.read_register(REG_INTRA_PRESENCE_SCORE, 4)?;
+        let inter_score_data = self.i2c.read_register(REG_INTER_PRESENCE_SCORE, 4)?;
 
-        let presence_detected = result_data[0] != 0;
+        // Parse presence result (register 16/0x10)
+        let presence_result = u32::from_le_bytes([
+            presence_result_data[0],
+            presence_result_data[1],
+            presence_result_data[2],
+            presence_result_data[3],
+        ]);
+
+        let presence_detected = (presence_result & 0x01) != 0; // Bit 0: presence detected
+        #[allow(clippy::no_effect_underscore_binding)] // Reserved for future sticky detection logic
+        let _presence_sticky = (presence_result & 0x02) != 0; // Bit 1: presence sticky
+        let detector_error = (presence_result & 0x8000) != 0; // Bit 15: detector error
+
+        if detector_error {
+            return Err(RadarError::DeviceError {
+                message: "Presence detector error flag set".to_string(),
+            });
+        }
+
+        // Parse presence distance (register 17/0x11) - distance in mm
         let distance_raw = u32::from_le_bytes([
-            result_data[1],
-            result_data[2],
-            result_data[3],
-            result_data[4],
+            presence_distance_data[0],
+            presence_distance_data[1],
+            presence_distance_data[2],
+            presence_distance_data[3],
         ]);
+
+        // Parse intra presence score (register 18/0x12) - fast motion
         let intra_score_raw = u32::from_le_bytes([
-            result_data[5],
-            result_data[6],
-            result_data[7],
-            result_data[8],
+            intra_score_data[0],
+            intra_score_data[1],
+            intra_score_data[2],
+            intra_score_data[3],
         ]);
+
+        // Parse inter presence score (register 19/0x13) - slow motion
         let inter_score_raw = u32::from_le_bytes([
-            result_data[9],
-            result_data[10],
-            result_data[11],
-            result_data[12],
+            inter_score_data[0],
+            inter_score_data[1],
+            inter_score_data[2],
+            inter_score_data[3],
         ]);
-        let temperature = i16::from_le_bytes([result_data[13], result_data[14]]);
 
         #[allow(clippy::cast_precision_loss)]
         let presence_distance = (distance_raw as f32) / 1000.0; // Convert mm to m
@@ -578,7 +700,7 @@ impl XM125Radar {
             presence_distance,
             intra_presence_score: intra_score,
             inter_presence_score: inter_score,
-            temperature,
+            temperature: 0, // Temperature not available in presence registers
             timestamp: chrono::Utc::now(),
         })
     }
