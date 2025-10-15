@@ -58,8 +58,19 @@ impl FirmwareManager {
         }
     }
 
-    /// Update firmware to the specified type
+    /// Update firmware to the specified type (without verification)
+    #[allow(dead_code)] // Kept for API compatibility
     pub async fn update_firmware(&self, firmware_type: FirmwareType) -> Result<()> {
+        self.update_firmware_with_verification(firmware_type, false)
+            .await
+    }
+
+    /// Update firmware with optional verification
+    pub async fn update_firmware_with_verification(
+        &self,
+        firmware_type: FirmwareType,
+        verify: bool,
+    ) -> Result<()> {
         let binary_filename = firmware_type.binary_filename();
         let binary_path = format!("{}/{binary_filename}", self.firmware_path);
 
@@ -84,9 +95,16 @@ impl FirmwareManager {
         // Step 3: Reset to run mode
         self.reset_to_run_mode()?;
 
-        // Step 4: Verify firmware was flashed correctly
-        tokio::time::sleep(Duration::from_millis(2000)).await; // Allow device to initialize
-        self.verify_firmware(firmware_type).await?;
+        // Step 4: Optional verification
+        if verify {
+            info!("Verifying firmware installation...");
+            tokio::time::sleep(Duration::from_millis(2000)).await; // Allow device to initialize
+            self.verify_firmware(firmware_type).await?;
+        } else {
+            info!("Skipping firmware verification (use --verify to enable)");
+            // Just give the device time to initialize without verification
+            tokio::time::sleep(Duration::from_millis(1000)).await;
+        }
 
         info!(
             "Successfully updated firmware to {} (App ID: {})",

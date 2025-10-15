@@ -138,6 +138,10 @@ pub struct Cli {
     #[arg(long, help = "Automatically update firmware if wrong type is detected")]
     pub auto_update_firmware: bool,
 
+    /// Verify firmware after auto-updates (may cause timeouts)
+    #[arg(long, help = "Verify firmware after automatic updates")]
+    pub auto_verify_firmware: bool,
+
     /// Firmware directory path (contains .bin files)
     #[arg(
         long,
@@ -293,6 +297,10 @@ pub enum FirmwareAction {
         /// Force update even if firmware already matches
         #[arg(short, long, help = "Force firmware update even if already correct")]
         force: bool,
+
+        /// Verify firmware after update (adds delay and may timeout)
+        #[arg(long, help = "Verify firmware installation after update")]
+        verify: bool,
     },
 
     /// Verify firmware integrity using checksums

@@ -116,7 +116,10 @@ async fn run(cli: Cli) -> Result<(), RadarError> {
                 if firmware_manager.firmware_update_needed(current_app_id, desired_firmware_type)? {
                     info!("Firmware update required for {:?} mode", cli.mode);
                     firmware_manager
-                        .update_firmware(desired_firmware_type)
+                        .update_firmware_with_verification(
+                            desired_firmware_type,
+                            cli.auto_verify_firmware,
+                        )
                         .await?;
 
                     // Recreate radar instance after firmware update
@@ -133,7 +136,10 @@ async fn run(cli: Cli) -> Result<(), RadarError> {
                 if cli.auto_update_firmware {
                     info!("Proceeding with firmware update due to communication issues");
                     firmware_manager
-                        .update_firmware(desired_firmware_type)
+                        .update_firmware_with_verification(
+                            desired_firmware_type,
+                            cli.auto_verify_firmware,
+                        )
                         .await?;
 
                     // Recreate radar instance after firmware update
@@ -632,6 +638,7 @@ async fn handle_firmware_command(action: FirmwareAction, cli: &Cli) -> Result<()
         FirmwareAction::Update {
             firmware_type,
             force,
+            verify,
         } => {
             let target_firmware = firmware::FirmwareType::from(firmware_type);
 
@@ -661,11 +668,14 @@ async fn handle_firmware_command(action: FirmwareAction, cli: &Cli) -> Result<()
             }
 
             info!(
-                "Updating firmware to {} (forced: {})",
+                "Updating firmware to {} (forced: {}, verify: {})",
                 target_firmware.display_name(),
-                force
+                force,
+                verify
             );
-            firmware_manager.update_firmware(target_firmware).await?;
+            firmware_manager
+                .update_firmware_with_verification(target_firmware, verify)
+                .await?;
 
             let success_msg = format!(
                 "Successfully updated firmware to {}",

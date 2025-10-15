@@ -1,6 +1,21 @@
 # XM125 Radar Monitor
 
+[![Build Status](https://github.com/DynamicDevices/xm125-radar-monitor/workflows/CI/badge.svg)](https://github.com/DynamicDevices/xm125-radar-monitor/actions)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org)
+[![Platform](https://img.shields.io/badge/platform-ARM64%20Linux-green.svg)](https://github.com/DynamicDevices/xm125-radar-monitor)
+[![Codecov](https://codecov.io/gh/DynamicDevices/xm125-radar-monitor/branch/main/graph/badge.svg)](https://codecov.io/gh/DynamicDevices/xm125-radar-monitor)
+[![Security Audit](https://github.com/DynamicDevices/xm125-radar-monitor/workflows/Security%20Audit/badge.svg)](https://github.com/DynamicDevices/xm125-radar-monitor/actions)
+[![Crates.io](https://img.shields.io/crates/v/xm125-radar-monitor.svg)](https://crates.io/crates/xm125-radar-monitor)
+[![Documentation](https://docs.rs/xm125-radar-monitor/badge.svg)](https://docs.rs/xm125-radar-monitor)
+
 Production-ready CLI tool for Acconeer XM125 radar modules with automatic firmware management.
+
+**Maintainer**: Alex J Lennon (ajlennon@dynamicdevices.co.uk)  
+**Contact**: info@dynamicdevices.co.uk  
+**Copyright**: © 2025 Dynamic Devices Ltd. All rights reserved.
+
+**Keywords**: Acconeer XM125, radar sensor, I2C communication, firmware management, distance detection, presence detection, embedded Linux, ARM64, cross-compilation, stm32flash
 
 ## Features
 
@@ -102,4 +117,6 @@ Use `--verbose` for detailed I2C transaction logs.
 
 ## License
 
-Licensed under MIT License. See [LICENSE](LICENSE) for details.
+Licensed under GNU General Public License v3.0. See [LICENSE](LICENSE) for details.
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.

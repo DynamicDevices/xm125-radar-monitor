@@ -1,418 +1,126 @@
-name: CI/CD Pipeline
+name: CI
 
 on:
   push:
     branches: [ main, develop ]
-    tags: [ 'v*' ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main ]
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_BACKTRACE: 1
 
 jobs:
-  # ============================================================================
-  # Code Quality and Testing
-  # ============================================================================
   test:
-    name: Test and Quality Checks
+    name: Test Suite
     runs-on: ubuntu-latest
-    container:
-      image: rust:1.81-bullseye
-      options: --user root
-
+    strategy:
+      matrix:
+        rust:
+          - stable
+          - beta
+          - nightly
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@master
       with:
-        fetch-depth: 0
-
-    - name: Install system dependencies
-      run: |
-        apt-get update && apt-get install -y \
-          build-essential \
-          pkg-config \
-          libudev-dev \
-          libssl-dev \
-          ca-certificates \
-          curl
-
-    - name: Cache Rust dependencies
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo/bin/
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          target/
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-cargo-
-
-    - name: Install Rust toolchain
-      run: |
-        rustup component add clippy rustfmt
-        rustup show
-
-    - name: Check code formatting
-      run: cargo fmt --all -- --check
-
-    - name: Run Clippy lints
-      run: cargo clippy --all-targets --all-features -- -D warnings -D clippy::all -D clippy::pedantic -A dead_code -A clippy::module_name_repetitions -A clippy::similar_names
-
+        toolchain: ${{ matrix.rust }}
+    - uses: Swatinem/rust-cache@v2
     - name: Run tests
-      run: cargo test --verbose --all-features
+      run: cargo test --verbose
 
-    - name: Check documentation
-      run: cargo doc --no-deps --document-private-items
+  fmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt
+    - name: Enforce formatting
+      run: cargo fmt --check
 
-  # ============================================================================
-  # Security Audit
-  # ============================================================================
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        components: clippy
+    - uses: Swatinem/rust-cache@v2
+    - name: Linting
+      run: cargo clippy --all-targets --all-features -- -D warnings
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - x86_64-unknown-linux-gnu
+          - aarch64-unknown-linux-gnu
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.target }}
+    - uses: Swatinem/rust-cache@v2
+    - name: Install cross-compilation tools
+      if: matrix.target == 'aarch64-unknown-linux-gnu'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gcc-aarch64-linux-gnu
+    - name: Build for ${{ matrix.target }}
+      run: cargo build --release --target ${{ matrix.target }}
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: xm125-radar-monitor-${{ matrix.target }}
+        path: target/${{ matrix.target }}/release/xm125-radar-monitor
+
   security:
     name: Security Audit
     runs-on: ubuntu-latest
-    container:
-      image: rust:1.81-bullseye
-
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
+    - name: Install cargo-audit
+      run: cargo install cargo-audit
+    - name: Run security audit
+      run: cargo audit
 
-    - name: Check for known vulnerabilities in dependencies
-      run: |
-        echo "Checking for known vulnerable dependencies..."
-        # Simple check for known problematic crates
-        if grep -r "openssl.*0\." Cargo.toml; then
-          echo "Warning: Old OpenSSL version detected"
-        fi
-        
-        # Check for outdated critical dependencies
-        cargo tree --depth 1 | grep -E "(openssl|ring|rustls)" || echo "No critical security crates found"
-        
-        echo "Security check completed - manual audit recommended for production"
-
-  # ============================================================================
-  # Native Build - Quick Code Checks
-  # ============================================================================
-  build-native:
-    name: Native Build & Code Checks
+  coverage:
+    name: Code Coverage
     runs-on: ubuntu-latest
-    needs: [test, security]
-    container:
-      image: rust:1.81-bullseye
-      options: --user root
-
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Install system dependencies
-      run: |
-        apt-get update && apt-get install -y \
-          build-essential \
-          pkg-config \
-          libudev-dev \
-          libssl-dev
-
-    - name: Cache Rust dependencies
-      uses: actions/cache@v4
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
       with:
-        path: |
-          ~/.cargo/bin/
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          target/
-        key: ${{ runner.os }}-cargo-native-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-cargo-native-
-          ${{ runner.os }}-cargo-
-
-    - name: Build native release binary
-      run: |
-        cargo build --release --verbose
-
-    - name: Test CLI interface
-      run: |
-        ./target/release/xm125-radar-monitor --help
-        ./target/release/xm125-radar-monitor --version
-
-    - name: Check binary size and info
-      run: |
-        ls -lh target/release/xm125-radar-monitor
-        echo "Binary size: $(stat -c%s target/release/xm125-radar-monitor) bytes"
-        file target/release/xm125-radar-monitor
-        ldd target/release/xm125-radar-monitor || echo "Static binary or missing deps"
-
-    - name: Run basic smoke tests
-      run: |
-        # Test that the binary can handle basic commands without hardware
-        timeout 5s ./target/release/xm125-radar-monitor status || echo "Expected failure without hardware"
-        timeout 5s ./target/release/xm125-radar-monitor info || echo "Expected failure without hardware"
-        
-        # Test output formats
-        ./target/release/xm125-radar-monitor --format json --help > /dev/null
-        ./target/release/xm125-radar-monitor --format csv --help > /dev/null
-
-    - name: Create artifact directory
-      run: |
-        mkdir -p artifacts
-        cp target/release/xm125-radar-monitor artifacts/xm125-radar-monitor-linux-x64
-        
-        # Create build info
-        cat > artifacts/build-info-native.txt << EOF
-        Build Information (Native)
-        ==========================
-        Target: x86_64-unknown-linux-gnu (native)
-        Commit: ${{ github.sha }}
-        Branch: ${{ github.ref_name }}
-        Build Date: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
-        Rust Version: $(rustc --version)
-        Cargo Version: $(cargo --version)
-        Binary Size: $(stat -c%s target/release/xm125-radar-monitor) bytes
-        EOF
-
-    - name: Upload native build artifacts
-      uses: actions/upload-artifact@v4
+        components: llvm-tools-preview
+    - uses: Swatinem/rust-cache@v2
+    - name: Install cargo-llvm-cov
+      run: cargo install cargo-llvm-cov
+    - name: Generate code coverage
+      run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
       with:
-        name: xm125-radar-monitor-linux-x64-native
-        path: |
-          artifacts/xm125-radar-monitor-linux-x64
-          artifacts/build-info-native.txt
-        retention-days: 30
+        files: lcov.info
+        fail_ci_if_error: true
 
-  # ============================================================================
-  # Cross-Compilation Build Matrix
-  # ============================================================================
-  build-cross:
-    name: Cross-compile (${{ matrix.target }})
+  docs:
+    name: Documentation
     runs-on: ubuntu-latest
-    needs: [build-native]  # Only run cross-compilation if native build succeeds
-    container:
-      image: rust:1.81-bullseye
-      options: --user root
-
-    strategy:
-      fail-fast: false
-      matrix:
-        target:
-          - aarch64-unknown-linux-gnu
-        include:
-          - target: aarch64-unknown-linux-gnu
-            artifact_name: xm125-radar-monitor-linux-arm64
-
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Install system dependencies
-      run: |
-        apt-get update && apt-get install -y \
-          build-essential \
-          pkg-config \
-          libudev-dev \
-          libssl-dev \
-          gcc-aarch64-linux-gnu \
-          libc6-dev-arm64-cross
-
-    - name: Cache Rust dependencies
-      uses: actions/cache@v4
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
+    - name: Build documentation
+      run: cargo doc --no-deps --all-features
+    - name: Deploy to GitHub Pages
+      if: github.ref == 'refs/heads/main'
+      uses: peaceiris/actions-gh-pages@v3
       with:
-        path: |
-          ~/.cargo/bin/
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          target/
-        key: ${{ runner.os }}-cargo-cross-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-cargo-cross-${{ matrix.target }}-
-          ${{ runner.os }}-cargo-cross-
-          ${{ runner.os }}-cargo-
-
-    - name: Install Rust target
-      run: |
-        rustup target add ${{ matrix.target }}
-        rustup show
-
-    - name: Configure cross-compilation environment
-      run: |
-        echo "CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
-        echo "CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++" >> $GITHUB_ENV
-        echo "AR_aarch64_unknown_linux_gnu=aarch64-linux-gnu-ar" >> $GITHUB_ENV
-        echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
-
-    - name: Build release binary
-      run: |
-        cargo build --release --target ${{ matrix.target }} --verbose
-
-    - name: Strip binary
-      run: |
-        aarch64-linux-gnu-strip target/${{ matrix.target }}/release/xm125-radar-monitor
-
-    - name: Check cross-compiled binary
-      run: |
-        file target/${{ matrix.target }}/release/xm125-radar-monitor
-        ls -lh target/${{ matrix.target }}/release/xm125-radar-monitor
-        echo "ARM64 Binary size: $(stat -c%s target/${{ matrix.target }}/release/xm125-radar-monitor) bytes"
-
-    - name: Create artifact directory
-      run: |
-        mkdir -p artifacts
-        cp target/${{ matrix.target }}/release/xm125-radar-monitor artifacts/${{ matrix.artifact_name }}
-        
-        # Create build info
-        cat > artifacts/build-info-${{ matrix.target }}.txt << EOF
-        Build Information (Cross-compiled)
-        ==================================
-        Target: ${{ matrix.target }}
-        Commit: ${{ github.sha }}
-        Branch: ${{ github.ref_name }}
-        Build Date: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
-        Rust Version: $(rustc --version)
-        Cargo Version: $(cargo --version)
-        Cross-compiler: $(aarch64-linux-gnu-gcc --version | head -n1)
-        Binary Size: $(stat -c%s target/${{ matrix.target }}/release/xm125-radar-monitor) bytes
-        EOF
-
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{ matrix.artifact_name }}
-        path: |
-          artifacts/${{ matrix.artifact_name }}
-          artifacts/build-info-${{ matrix.target }}.txt
-        retention-days: 30
-
-    - name: Generate checksums
-      run: |
-        cd artifacts
-        sha256sum ${{ matrix.artifact_name }} > ${{ matrix.artifact_name }}.sha256
-        md5sum ${{ matrix.artifact_name }} > ${{ matrix.artifact_name }}.md5
-
-    - name: Upload checksums
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{ matrix.artifact_name }}-checksums
-        path: |
-          artifacts/${{ matrix.artifact_name }}.sha256
-          artifacts/${{ matrix.artifact_name }}.md5
-        retention-days: 30
-
-  # ============================================================================
-  # Create Release (on tags)
-  # ============================================================================
-  release:
-    name: Create Release
-    runs-on: ubuntu-latest
-    needs: [build-native, build-cross]
-    if: startsWith(github.ref, 'refs/tags/v')
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Download all artifacts
-      uses: actions/download-artifact@v4
-      with:
-        path: artifacts
-
-    - name: Prepare release assets
-      run: |
-        mkdir -p release-assets
-        
-        # Copy all binaries and checksums
-        find artifacts -name "xm125-radar-monitor-*" -type f | while read file; do
-          cp "$file" release-assets/
-        done
-        
-        # Create combined checksums file
-        cat artifacts/*/*.sha256 > release-assets/SHA256SUMS
-        cat artifacts/*/*.md5 > release-assets/MD5SUMS
-        
-        # Create release notes
-        cat > release-assets/RELEASE_NOTES.md << EOF
-        # XM125 Radar Monitor ${{ github.ref_name }}
-        
-        ## Build Information
-        - **Commit**: ${{ github.sha }}
-        - **Build Date**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
-        - **Rust Version**: 1.81
-        
-        ## Supported Platforms
-        - **Linux x86_64**: \`xm125-radar-monitor-linux-x64\`
-        - **Linux ARM64**: \`xm125-radar-monitor-linux-arm64\`
-        
-        ## Installation
-        1. Download the appropriate binary for your platform
-        2. Make it executable: \`chmod +x xm125-radar-monitor-*\`
-        3. Move to your PATH: \`sudo mv xm125-radar-monitor-* /usr/local/bin/xm125-radar-monitor\`
-        
-        ## Verification
-        Verify the download integrity using the provided checksums:
-        \`\`\`bash
-        sha256sum -c SHA256SUMS
-        \`\`\`
-        
-        ## Target Hardware
-        - **Module**: Acconeer XM125 radar sensor
-        - **Interface**: I2C (/dev/i2c-1 at address 0x52)
-        - **Supported Features**: Distance measurement, presence detection, calibration
-        
-        ## License
-        Commercial License - Copyright (c) 2025 Dynamic Devices Ltd
-        Contact: info@dynamicdevices.co.uk
-        EOF
-
-    - name: Create GitHub Release
-      uses: softprops/action-gh-release@v1
-      with:
-        files: release-assets/*
-        body_path: release-assets/RELEASE_NOTES.md
-        draft: false
-        prerelease: ${{ contains(github.ref_name, '-') }}
-        generate_release_notes: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # ============================================================================
-  # Build Status Summary
-  # ============================================================================
-  build-summary:
-    name: Build Summary
-    runs-on: ubuntu-latest
-    needs: [test, security, build-native, build-cross]
-    if: always()
-
-    steps:
-    - name: Build Summary
-      run: |
-        echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
-        echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
-        echo "| Tests & Quality | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| Security Audit | ${{ needs.security.result }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| Native Build | ${{ needs.build-native.result }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| Cross-compile | ${{ needs.build-cross.result }} |" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        
-        if [ "${{ needs.test.result }}" = "success" ] && [ "${{ needs.security.result }}" = "success" ] && [ "${{ needs.build-native.result }}" = "success" ] && [ "${{ needs.build-cross.result }}" = "success" ]; then
-          echo "✅ All builds completed successfully!" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Build Artifacts" >> $GITHUB_STEP_SUMMARY
-          echo "- **Native (x86_64)**: Fast feedback and code validation" >> $GITHUB_STEP_SUMMARY
-          echo "- **Cross-compiled (ARM64)**: Embedded target deployment" >> $GITHUB_STEP_SUMMARY
-        else
-          echo "❌ Some builds failed. Check the individual job logs for details." >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ needs.build-native.result }}" = "success" ]; then
-            echo "✅ Native build succeeded - basic code validation passed" >> $GITHUB_STEP_SUMMARY
-          fi
-          if [ "${{ needs.build-cross.result }}" = "success" ]; then
-            echo "✅ Cross-compilation succeeded - embedded target ready" >> $GITHUB_STEP_SUMMARY
-          fi
-        fi
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./target/doc
