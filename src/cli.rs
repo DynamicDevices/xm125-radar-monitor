@@ -202,17 +202,17 @@ pub enum Commands {
     /// presence detector mode.
     Presence,
 
-            /// Perform combined distance and presence measurement (requires --mode combined)
-            /// 
-            /// Takes both distance and presence readings in a single operation.
-            /// Useful for applications requiring both measurement types.
-            Combined,
+    /// Perform combined distance and presence measurement (requires --mode combined)
+    ///
+    /// Takes both distance and presence readings in a single operation.
+    /// Useful for applications requiring both measurement types.
+    Combined,
 
-            /// Perform breathing detection measurement (requires --mode breathing)
-            /// 
-            /// Monitors breathing patterns and estimates breathing rate in BPM.
-            /// Shows application state, breathing rate, and presence information.
-            Breathing,
+    /// Perform breathing detection measurement (requires --mode breathing)
+    ///
+    /// Monitors breathing patterns and estimates breathing rate in BPM.
+    /// Shows application state, breathing rate, and presence information.
+    Breathing,
 
     /// Calibrate the XM125 radar sensor
     ///
