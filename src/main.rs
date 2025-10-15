@@ -17,16 +17,18 @@
  */
 
 use clap::Parser;
-use log::{debug, error};
+use log::{debug, error, info, warn};
 use std::process;
 
 mod cli;
 mod error;
+mod firmware;
 mod i2c;
 mod radar;
 
-use cli::Cli;
+use cli::{Cli, FirmwareAction};
 use error::RadarError;
+use firmware::FirmwareManager;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const APP_NAME: &str = env!("CARGO_PKG_NAME");
@@ -99,6 +101,52 @@ async fn run(cli: Cli) -> Result<(), RadarError> {
     }
 
     let mut radar = radar::XM125Radar::new(i2c_device);
+
+    // Create firmware manager
+    let firmware_manager =
+        FirmwareManager::new(&cli.firmware_path, &cli.control_script, cli.i2c_address);
+
+    // Check if firmware update is needed (if auto-update is enabled)
+    if cli.auto_update_firmware {
+        let desired_firmware_type = firmware::FirmwareType::from(cli.mode.clone());
+
+        // Try to read current firmware info
+        match get_current_firmware_info(&mut radar) {
+            Ok(current_app_id) => {
+                if firmware_manager.firmware_update_needed(current_app_id, desired_firmware_type)? {
+                    info!("Firmware update required for {:?} mode", cli.mode);
+                    firmware_manager
+                        .update_firmware(desired_firmware_type)
+                        .await?;
+
+                    // Recreate radar instance after firmware update
+                    let i2c_device_path = cli.get_i2c_device_path();
+                    let mut i2c_device = i2c::I2cDevice::new(&i2c_device_path, cli.i2c_address)?;
+                    if cli.wakeup_pin.is_some() || cli.int_pin.is_some() {
+                        i2c_device.configure_gpio(cli.wakeup_pin, cli.int_pin)?;
+                    }
+                    radar = radar::XM125Radar::new(i2c_device);
+                }
+            }
+            Err(e) => {
+                warn!("Could not check current firmware: {e}");
+                if cli.auto_update_firmware {
+                    info!("Proceeding with firmware update due to communication issues");
+                    firmware_manager
+                        .update_firmware(desired_firmware_type)
+                        .await?;
+
+                    // Recreate radar instance after firmware update
+                    let i2c_device_path = cli.get_i2c_device_path();
+                    let mut i2c_device = i2c::I2cDevice::new(&i2c_device_path, cli.i2c_address)?;
+                    if cli.wakeup_pin.is_some() || cli.int_pin.is_some() {
+                        i2c_device.configure_gpio(cli.wakeup_pin, cli.int_pin)?;
+                    }
+                    radar = radar::XM125Radar::new(i2c_device);
+                }
+            }
+        }
+    }
 
     // Configure radar based on CLI options
     configure_radar_from_cli(&mut radar, &cli).await?;
@@ -244,6 +292,9 @@ async fn execute_command(
                 "⚙️",
                 "Configuration",
             )?;
+        }
+        Commands::Firmware { action } => {
+            handle_firmware_command(action, cli).await?;
         }
     }
 
@@ -527,5 +578,216 @@ fn configure_detector(
     }
 
     radar.set_config(config);
+}
+
+/// Handle firmware management commands
+#[allow(clippy::too_many_lines)] // Complex firmware management requires detailed handling
+async fn handle_firmware_command(action: FirmwareAction, cli: &Cli) -> Result<(), RadarError> {
+    let firmware_manager =
+        FirmwareManager::new(&cli.firmware_path, &cli.control_script, cli.i2c_address);
+
+    match action {
+        FirmwareAction::Check => {
+            // Create a temporary radar instance to read firmware info
+            let i2c_device_path = cli.get_i2c_device_path();
+            let i2c_device = i2c::I2cDevice::new(&i2c_device_path, cli.i2c_address)?;
+            let mut radar = radar::XM125Radar::new(i2c_device);
+
+            match get_current_firmware_info(&mut radar) {
+                Ok(app_id) => {
+                    let firmware_type = match app_id {
+                        1 => "Distance Detector",
+                        2 => "Presence Detector",
+                        3 => "Breathing Monitor",
+                        _ => "Unknown",
+                    };
+
+                    let response = format!("Current firmware: {firmware_type} (App ID: {app_id})");
+                    output_response(cli, "firmware_check", &response, "🔍", "Firmware Check")?;
+
+                    // Also try to get checksum if possible
+                    match firmware_manager.get_firmware_checksum() {
+                        Ok(checksum) => {
+                            let checksum_info = format!("Firmware checksum: {checksum}");
+                            output_response(
+                                cli,
+                                "firmware_checksum",
+                                &checksum_info,
+                                "🔐",
+                                "Checksum",
+                            )?;
+                        }
+                        Err(e) => {
+                            warn!("Could not read firmware checksum: {e}");
+                        }
+                    }
+                }
+                Err(e) => {
+                    let error_msg = format!("Could not read firmware information: {e}");
+                    output_response(cli, "firmware_error", &error_msg, "❌", "Firmware Error")?;
+                }
+            }
+        }
+
+        FirmwareAction::Update {
+            firmware_type,
+            force,
+        } => {
+            let target_firmware = firmware::FirmwareType::from(firmware_type);
+
+            if !force {
+                // Check if update is actually needed
+                let i2c_device_path = cli.get_i2c_device_path();
+                let i2c_device = i2c::I2cDevice::new(&i2c_device_path, cli.i2c_address)?;
+                let mut radar = radar::XM125Radar::new(i2c_device);
+
+                match get_current_firmware_info(&mut radar) {
+                    Ok(current_app_id) => {
+                        if !firmware_manager
+                            .firmware_update_needed(current_app_id, target_firmware)?
+                        {
+                            let msg = format!(
+                                "Firmware already matches {} - no update needed",
+                                target_firmware.display_name()
+                            );
+                            output_response(cli, "firmware_update", &msg, "✅", "Firmware Update")?;
+                            return Ok(());
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Could not verify current firmware, proceeding with update: {e}");
+                    }
+                }
+            }
+
+            info!(
+                "Updating firmware to {} (forced: {})",
+                target_firmware.display_name(),
+                force
+            );
+            firmware_manager.update_firmware(target_firmware).await?;
+
+            let success_msg = format!(
+                "Successfully updated firmware to {}",
+                target_firmware.display_name()
+            );
+            output_response(
+                cli,
+                "firmware_update",
+                &success_msg,
+                "🚀",
+                "Firmware Update",
+            )?;
+        }
+
+        FirmwareAction::Verify { firmware_type } => {
+            #[allow(clippy::single_match_else)]
+            // Complex verification logic requires match structure
+            match firmware_type {
+                Some(fw_type) => {
+                    let target_firmware = firmware::FirmwareType::from(fw_type);
+
+                    // Compare device checksum with binary checksum
+                    match firmware_manager.get_firmware_checksum() {
+                        Ok(device_checksum) => {
+                            match firmware_manager.calculate_binary_checksum(target_firmware) {
+                                Ok(binary_checksum) => {
+                                    if device_checksum == binary_checksum {
+                                        let msg = format!("✅ Firmware verification PASSED for {}\nDevice: {}\nBinary: {}", 
+                                                         target_firmware.display_name(), device_checksum, binary_checksum);
+                                        output_response(
+                                            cli,
+                                            "firmware_verify",
+                                            &msg,
+                                            "✅",
+                                            "Verification",
+                                        )?;
+                                    } else {
+                                        let msg = format!("❌ Firmware verification FAILED for {}\nDevice: {}\nBinary: {}", 
+                                                         target_firmware.display_name(), device_checksum, binary_checksum);
+                                        output_response(
+                                            cli,
+                                            "firmware_verify",
+                                            &msg,
+                                            "❌",
+                                            "Verification",
+                                        )?;
+                                    }
+                                }
+                                Err(e) => {
+                                    let msg = format!("Could not calculate binary checksum: {e}");
+                                    output_response(
+                                        cli,
+                                        "firmware_verify",
+                                        &msg,
+                                        "❌",
+                                        "Verification Error",
+                                    )?;
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            let msg = format!("Could not read device checksum: {e}");
+                            output_response(
+                                cli,
+                                "firmware_verify",
+                                &msg,
+                                "❌",
+                                "Verification Error",
+                            )?;
+                        }
+                    }
+                }
+                None => {
+                    // Verify all available firmware types
+                    let firmware_types = [
+                        firmware::FirmwareType::Distance,
+                        firmware::FirmwareType::Presence,
+                        firmware::FirmwareType::Breathing,
+                    ];
+
+                    for fw_type in &firmware_types {
+                        match firmware_manager.calculate_binary_checksum(*fw_type) {
+                            Ok(checksum) => {
+                                let msg = format!("{}: {}", fw_type.display_name(), checksum);
+                                output_response(
+                                    cli,
+                                    "firmware_checksums",
+                                    &msg,
+                                    "🔐",
+                                    "Binary Checksums",
+                                )?;
+                            }
+                            Err(e) => {
+                                warn!(
+                                    "Could not calculate checksum for {}: {}",
+                                    fw_type.display_name(),
+                                    e
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Get current firmware application ID
+fn get_current_firmware_info(radar: &mut radar::XM125Radar) -> Result<u32, RadarError> {
+    // Try to connect and read application ID
+    match radar.connect() {
+        Ok(()) => {
+            // Read the application ID register directly
+            let app_id_data = radar.read_application_id()?;
+            Ok(app_id_data)
+        }
+        Err(e) => {
+            warn!("Could not connect to read firmware info: {e}");
+            Err(e)
+        }
+    }
 }
 // Test comment

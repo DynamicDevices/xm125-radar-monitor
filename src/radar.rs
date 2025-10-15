@@ -391,6 +391,17 @@ impl XM125Radar {
         ]))
     }
 
+    /// Read application ID register
+    pub fn read_application_id(&mut self) -> Result<u32> {
+        let app_id_data = self.i2c.read_register(REG_APPLICATION_ID, 4)?;
+        Ok(u32::from_be_bytes([
+            app_id_data[0],
+            app_id_data[1],
+            app_id_data[2],
+            app_id_data[3],
+        ]))
+    }
+
     fn send_command(&mut self, command: u32) -> Result<()> {
         debug!("Sending command: 0x{command:08X}");
         let cmd_bytes = command.to_be_bytes(); // Fixed: Use big-endian for XM125 commands

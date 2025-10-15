@@ -1,5 +1,7 @@
 use clap::{Parser, Subcommand, ValueEnum};
 
+use crate::firmware;
+
 /// Parse I2C address from string, supporting both decimal and hex formats
 fn parse_i2c_address(s: &str) -> Result<u16, String> {
     if let Some(hex_str) = s.strip_prefix("0x") {
@@ -132,6 +134,26 @@ pub struct Cli {
     )]
     pub int_pin: Option<u32>,
 
+    /// Enable automatic firmware updates when detector mode doesn't match
+    #[arg(long, help = "Automatically update firmware if wrong type is detected")]
+    pub auto_update_firmware: bool,
+
+    /// Firmware directory path (contains .bin files)
+    #[arg(
+        long,
+        default_value = "/lib/firmware/acconeer",
+        help = "Directory containing firmware binaries"
+    )]
+    pub firmware_path: String,
+
+    /// XM125 control script path
+    #[arg(
+        long,
+        default_value = "/home/fio/xm125-control.sh",
+        help = "Path to XM125 GPIO control script"
+    )]
+    pub control_script: String,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }
@@ -246,6 +268,67 @@ pub enum Commands {
         )]
         frame_rate: Option<f32>,
     },
+
+    /// Firmware management commands
+    Firmware {
+        #[command(subcommand)]
+        action: FirmwareAction,
+    },
+}
+
+#[derive(Clone, Debug, Subcommand)]
+pub enum FirmwareAction {
+    /// Check current firmware type and version
+    Check,
+
+    /// Update firmware to match the specified detector mode
+    ///
+    /// Automatically flashes the correct firmware binary for the selected mode.
+    /// Uses stm32flash and GPIO control for safe firmware updates.
+    Update {
+        /// Target firmware type (distance, presence, or breathing)
+        #[arg(help = "Firmware type: distance, presence, or breathing")]
+        firmware_type: FirmwareType,
+
+        /// Force update even if firmware already matches
+        #[arg(short, long, help = "Force firmware update even if already correct")]
+        force: bool,
+    },
+
+    /// Verify firmware integrity using checksums
+    Verify {
+        /// Firmware type to verify against
+        firmware_type: Option<FirmwareType>,
+    },
+}
+
+#[derive(Clone, Debug, ValueEnum)]
+pub enum FirmwareType {
+    /// Distance detector firmware
+    Distance,
+    /// Presence detector firmware  
+    Presence,
+    /// Breathing monitor firmware
+    Breathing,
+}
+
+impl From<FirmwareType> for firmware::FirmwareType {
+    fn from(cli_type: FirmwareType) -> Self {
+        match cli_type {
+            FirmwareType::Distance => firmware::FirmwareType::Distance,
+            FirmwareType::Presence => firmware::FirmwareType::Presence,
+            FirmwareType::Breathing => firmware::FirmwareType::Breathing,
+        }
+    }
+}
+
+impl From<crate::cli::DetectorMode> for firmware::FirmwareType {
+    fn from(mode: crate::cli::DetectorMode) -> Self {
+        match mode {
+            DetectorMode::Distance => firmware::FirmwareType::Distance,
+            DetectorMode::Presence | DetectorMode::Combined => firmware::FirmwareType::Presence, // Default to presence for combined
+        }
+    }
 }
 
 #[derive(Clone, Debug, ValueEnum)]

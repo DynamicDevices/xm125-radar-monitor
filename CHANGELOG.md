@@ -1,39 +1,40 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [Unreleased]
+## [0.2.0] - 2025-10-15
 
 ### Added
-- Initial XM125 radar monitor application
-- I2C communication with XM125 radar module
-- Distance measurement functionality
-- Automatic sensor calibration
-- Multiple output formats (human, JSON, CSV)
-- Continuous monitoring mode
+- **Automatic Firmware Management**: Complete integration with `stm32flash` for seamless firmware updates
+- **Multi-Firmware Support**: Distance, presence, and breathing detector firmware types
+- **GPIO Control**: Hardware reset and bootloader mode switching via GPIO pins
+- **Auto-Update Mode**: Automatically updates firmware when detector mode doesn't match
+- **Firmware Verification**: MD5 checksum validation and application ID verification
+- **Enhanced CLI**: Comprehensive help system with examples and troubleshooting
+- **Hardware Test Suite**: Automated testing with data analysis and reporting
+
+### Improved
+- **Error Handling**: Robust I2C communication with auto-reconnect capability
+- **Presence Detection**: Corrected register parsing and status interpretation
+- **Calibration**: Reduced timeout and improved error messages
+- **Connection Persistence**: Maintains connection state across command executions
+- **Configuration Logging**: Detailed startup configuration display
+
+### Fixed
+- **Byte Order Issues**: Corrected endianness for all register operations
+- **Status Flag Interpretation**: Updated to match official Acconeer specifications
+- **Compiler Warnings**: All Clippy warnings resolved with proper annotations
+- **Temperature Handling**: Removed invalid temperature readings from presence mode
+
+### Technical
+- **Code Quality**: Comprehensive linting with strict warning-as-error policy
+- **Documentation**: Engineer-focused documentation with minimal token usage
+- **Project Structure**: Cleaned up obsolete files and reorganized documentation
+- **Build System**: Optimized cross-compilation for ARM64 targets
+
+## [0.1.0] - 2025-10-01
+
+### Initial Release
+- Basic XM125 radar communication via I2C
+- Distance and presence detection modes
+- CLI interface with multiple output formats
 - Cross-compilation support for ARM64
-- Comprehensive CLI interface
-- Error handling and logging
-- XM125 documentation integration
-
-### Features
-- Real-time distance measurements
-- Configurable measurement intervals
-- Device status monitoring
-- Sensor information retrieval
-- Robust error handling
-- Verbose logging support
-
-## [0.1.0] - 2025-01-14
-
-### Added
-- Initial project structure based on Rust embedded template
-- XM125 documentation copied from Acconeer SDK
-- Basic I2C communication framework
-- CLI interface with clap
-- Cross-compilation setup for ARM64
-- Project documentation and README
-- Commercial licensing and Dynamic Devices Ltd copyright
+- Basic error handling and logging
