@@ -65,6 +65,14 @@ pub struct Cli {
     #[arg(long, conflicts_with = "auto_reconnect")]
     pub no_auto_reconnect: bool,
 
+    /// GPIO pin number for XM125 WAKEUP signal (optional)
+    #[arg(long)]
+    pub wakeup_pin: Option<u32>,
+
+    /// GPIO pin number for XM125 INT signal (optional)  
+    #[arg(long)]
+    pub int_pin: Option<u32>,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }

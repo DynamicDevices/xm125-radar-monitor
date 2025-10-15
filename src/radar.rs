@@ -58,8 +58,8 @@ const STATUS_PRESENCE_DETECTED: u32 = 0x08;
 const STATUS_CONTINUOUS_MODE: u32 = 0x10;
 const STATUS_ERROR: u32 = 0x80;
 
-// Timeout constants
-const CALIBRATION_TIMEOUT: Duration = Duration::from_secs(10);
+// Timeout constants - based on Acconeer documentation
+const CALIBRATION_TIMEOUT: Duration = Duration::from_secs(2); // Reduced from 10s based on docs showing 500ms-1s typical
 const MEASUREMENT_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -273,7 +273,7 @@ impl XM125Radar {
             }
 
             if start_time.elapsed() > CALIBRATION_TIMEOUT {
-                return Err(RadarError::Timeout { timeout: 10 });
+                return Err(RadarError::Timeout { timeout: 2 });
             }
 
             tokio::time::sleep(Duration::from_millis(100)).await;
@@ -327,7 +327,7 @@ impl XM125Radar {
 
     fn get_status_raw(&mut self) -> Result<u32> {
         let status_data = self.i2c.read_register(REG_DETECTOR_STATUS, 4)?;
-        Ok(u32::from_le_bytes([
+        Ok(u32::from_be_bytes([
             status_data[0],
             status_data[1],
             status_data[2],
@@ -487,7 +487,7 @@ impl XM125Radar {
             }
 
             if start_time.elapsed() > CALIBRATION_TIMEOUT {
-                return Err(RadarError::Timeout { timeout: 10 });
+                return Err(RadarError::Timeout { timeout: 2 });
             }
 
             tokio::time::sleep(Duration::from_millis(100)).await;

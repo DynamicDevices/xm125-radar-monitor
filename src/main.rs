@@ -69,7 +69,17 @@ async fn run(cli: Cli) -> Result<(), RadarError> {
         "Using I2C device: {} at address 0x{:02X}",
         i2c_device_path, cli.i2c_address
     );
-    let i2c_device = i2c::I2cDevice::new(&i2c_device_path, cli.i2c_address)?;
+    let mut i2c_device = i2c::I2cDevice::new(&i2c_device_path, cli.i2c_address)?;
+
+    // Configure GPIO pins if provided
+    if cli.wakeup_pin.is_some() || cli.int_pin.is_some() {
+        debug!(
+            "Configuring GPIO pins: WAKEUP={:?}, INT={:?}",
+            cli.wakeup_pin, cli.int_pin
+        );
+        i2c_device.configure_gpio(cli.wakeup_pin, cli.int_pin)?;
+    }
+
     let mut radar = radar::XM125Radar::new(i2c_device);
 
     // Configure radar based on CLI options
