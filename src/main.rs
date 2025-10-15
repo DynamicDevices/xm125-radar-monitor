@@ -177,12 +177,12 @@ async fn execute_command(
             count,
             save_to: _,
         } => {
-            monitor_distances(radar, cli, interval, count).await?;
+            monitor_measurements(radar, cli, interval, count).await?;
         }
         Commands::Presence => {
             let result = radar.measure_presence().await?;
             let response = format!(
-                "Presence: {}, Distance: {:.2}m, Intra: {:.2}, Inter: {:.2}, Temperature: {}°C",
+                "Presence: {}, Distance: {:.2}m, Intra: {:.2}, Inter: {:.2}",
                 if result.presence_detected {
                     "DETECTED"
                 } else {
@@ -190,8 +190,7 @@ async fn execute_command(
                 },
                 result.presence_distance,
                 result.intra_presence_score,
-                result.inter_presence_score,
-                result.temperature
+                result.inter_presence_score
             );
             output_response(cli, "presence", &response, "👁️", "Presence Detection")?;
         }
@@ -251,7 +250,8 @@ async fn execute_command(
     Ok(())
 }
 
-async fn monitor_distances(
+#[allow(clippy::too_many_lines)] // Complex monitoring function with multiple output formats
+async fn monitor_measurements(
     radar: &mut radar::XM125Radar,
     cli: &Cli,
     interval: u64,
@@ -262,40 +262,153 @@ async fn monitor_distances(
     let mut measurement_count = 0;
 
     loop {
-        let result = radar.measure_distance().await?;
-
-        match cli.format {
-            cli::OutputFormat::Human => {
-                println!(
-                    "[{}] Distance: {:.2}m | Strength: {:.1}dB | Temp: {}°C",
-                    chrono::Utc::now().format("%H:%M:%S"),
-                    result.distance,
-                    result.strength,
-                    result.temperature
-                );
-            }
-            cli::OutputFormat::Json => {
-                let json_response = serde_json::json!({
-                    "timestamp": chrono::Utc::now().to_rfc3339(),
-                    "distance_m": result.distance,
-                    "strength_db": result.strength,
-                    "temperature_c": result.temperature,
-                    "measurement_count": measurement_count
-                });
-                println!("{}", serde_json::to_string(&json_response)?);
-            }
-            cli::OutputFormat::Csv => {
-                if measurement_count == 0 {
-                    println!("timestamp,distance_m,strength_db,temperature_c,measurement_count");
+        // Choose measurement type based on detector mode
+        match cli.mode {
+            cli::DetectorMode::Distance => {
+                let result = radar.measure_distance().await?;
+                match cli.format {
+                    cli::OutputFormat::Human => {
+                        println!(
+                            "[{}] Distance: {:.2}m | Strength: {:.1}dB | Temp: {}°C",
+                            chrono::Utc::now().format("%H:%M:%S"),
+                            result.distance,
+                            result.strength,
+                            result.temperature
+                        );
+                    }
+                    cli::OutputFormat::Json => {
+                        let json_response = serde_json::json!({
+                            "timestamp": chrono::Utc::now().to_rfc3339(),
+                            "distance_m": result.distance,
+                            "strength_db": result.strength,
+                            "temperature_c": result.temperature,
+                            "measurement_count": measurement_count
+                        });
+                        println!("{}", serde_json::to_string(&json_response)?);
+                    }
+                    cli::OutputFormat::Csv => {
+                        if measurement_count == 0 {
+                            println!(
+                                "timestamp,distance_m,strength_db,temperature_c,measurement_count"
+                            );
+                        }
+                        println!(
+                            "{},{},{},{},{}",
+                            chrono::Utc::now().to_rfc3339(),
+                            result.distance,
+                            result.strength,
+                            result.temperature,
+                            measurement_count
+                        );
+                    }
                 }
-                println!(
-                    "{},{},{},{},{}",
-                    chrono::Utc::now().to_rfc3339(),
-                    result.distance,
-                    result.strength,
-                    result.temperature,
-                    measurement_count
-                );
+            }
+            cli::DetectorMode::Presence => {
+                let result = radar.measure_presence().await?;
+                match cli.format {
+                    cli::OutputFormat::Human => {
+                        println!(
+                            "[{}] Presence: {} | Distance: {:.2}m | Intra: {:.2} | Inter: {:.2}",
+                            chrono::Utc::now().format("%H:%M:%S"),
+                            if result.presence_detected {
+                                "DETECTED"
+                            } else {
+                                "NOT DETECTED"
+                            },
+                            result.presence_distance,
+                            result.intra_presence_score,
+                            result.inter_presence_score
+                        );
+                    }
+                    cli::OutputFormat::Json => {
+                        let json_response = serde_json::json!({
+                            "timestamp": chrono::Utc::now().to_rfc3339(),
+                            "presence_detected": result.presence_detected,
+                            "presence_distance_m": result.presence_distance,
+                            "intra_presence_score": result.intra_presence_score,
+                            "inter_presence_score": result.inter_presence_score,
+                            "measurement_count": measurement_count
+                        });
+                        println!("{}", serde_json::to_string(&json_response)?);
+                    }
+                    cli::OutputFormat::Csv => {
+                        if measurement_count == 0 {
+                            println!("timestamp,presence_detected,presence_distance_m,intra_score,inter_score,measurement_count");
+                        }
+                        println!(
+                            "{},{},{:.2},{:.2},{:.2},{}",
+                            chrono::Utc::now().to_rfc3339(),
+                            if result.presence_detected { "1" } else { "0" },
+                            result.presence_distance,
+                            result.intra_presence_score,
+                            result.inter_presence_score,
+                            measurement_count
+                        );
+                    }
+                }
+            }
+            cli::DetectorMode::Combined => {
+                let result = radar.measure_combined().await?;
+                match cli.format {
+                    cli::OutputFormat::Human => {
+                        let mut parts = Vec::new();
+                        if let Some(distance) = &result.distance {
+                            parts.push(format!(
+                                "Distance: {:.2}m ({:.1}dB)",
+                                distance.distance, distance.strength
+                            ));
+                        }
+                        if let Some(presence) = &result.presence {
+                            parts.push(format!(
+                                "Presence: {} at {:.2}m (intra: {:.2}, inter: {:.2})",
+                                if presence.presence_detected {
+                                    "DETECTED"
+                                } else {
+                                    "NOT DETECTED"
+                                },
+                                presence.presence_distance,
+                                presence.intra_presence_score,
+                                presence.inter_presence_score
+                            ));
+                        }
+                        println!(
+                            "[{}] {}",
+                            chrono::Utc::now().format("%H:%M:%S"),
+                            parts.join(" | ")
+                        );
+                    }
+                    cli::OutputFormat::Json => {
+                        println!("{}", serde_json::to_string(&result)?);
+                    }
+                    cli::OutputFormat::Csv => {
+                        if measurement_count == 0 {
+                            println!("timestamp,distance_m,strength_db,presence_detected,presence_distance_m,intra_score,inter_score,temperature_c,measurement_count");
+                        }
+                        let distance_str = if let Some(d) = &result.distance {
+                            format!("{:.2},{:.1},{}", d.distance, d.strength, d.temperature)
+                        } else {
+                            ",,".to_string()
+                        };
+                        let presence_str = if let Some(p) = &result.presence {
+                            format!(
+                                "{},{:.2},{:.2},{:.2}",
+                                if p.presence_detected { "1" } else { "0" },
+                                p.presence_distance,
+                                p.intra_presence_score,
+                                p.inter_presence_score
+                            )
+                        } else {
+                            ",,,".to_string()
+                        };
+                        println!(
+                            "{},{},{},{}",
+                            chrono::Utc::now().to_rfc3339(),
+                            distance_str,
+                            presence_str,
+                            measurement_count
+                        );
+                    }
+                }
             }
         }
 

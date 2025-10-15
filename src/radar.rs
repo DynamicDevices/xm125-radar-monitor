@@ -52,10 +52,16 @@ const CMD_CALIBRATE: u32 = 4; // DISTANCE_REG_COMMAND_ENUM_CALIBRATE
 const CMD_RECALIBRATE: u32 = 5; // DISTANCE_REG_COMMAND_ENUM_RECALIBRATE
 const CMD_RESET_MODULE: u32 = 0x5253_5421; // DISTANCE_REG_COMMAND_ENUM_RESET_MODULE
 
+// Presence detector specific commands (from presence_reg_protocol.h)
+const CMD_PRESENCE_APPLY_CONFIGURATION: u32 = 1; // PRESENCE_REG_COMMAND_ENUM_APPLY_CONFIGURATION
+const CMD_PRESENCE_START: u32 = 2; // PRESENCE_REG_COMMAND_ENUM_START
+#[allow(dead_code)] // Reserved for stopping presence measurements
+const CMD_PRESENCE_STOP: u32 = 3; // PRESENCE_REG_COMMAND_ENUM_STOP
+
 // Legacy/placeholder commands for compatibility (not in actual XM125 protocol)
 const CMD_ENABLE_DETECTOR: u32 = CMD_APPLY_CONFIGURATION;
 const CMD_DISABLE_DETECTOR: u32 = CMD_RESET_MODULE;
-const CMD_ENABLE_PRESENCE_DETECTOR: u32 = CMD_APPLY_CONFIGURATION;
+const CMD_ENABLE_PRESENCE_DETECTOR: u32 = CMD_PRESENCE_APPLY_CONFIGURATION;
 #[allow(dead_code)] // Reserved for future presence-specific commands
 const CMD_MEASURE_PRESENCE: u32 = CMD_MEASURE_DISTANCE; // Placeholder - presence uses same command for now
 #[allow(dead_code)] // Reserved for continuous monitoring
@@ -118,7 +124,6 @@ pub struct PresenceMeasurement {
     pub presence_distance: f32,
     pub intra_presence_score: f32, // Fast motion score
     pub inter_presence_score: f32, // Slow motion score
-    pub temperature: i16,
     pub timestamp: chrono::DateTime<chrono::Utc>,
 }
 
@@ -263,8 +268,8 @@ impl XM125Radar {
 
         // Parse basic sensor information (this would need to match actual XM125 format)
         let sensor_id =
-            u32::from_le_bytes([info_data[0], info_data[1], info_data[2], info_data[3]]);
-        let firmware_version = u16::from_le_bytes([info_data[4], info_data[5]]);
+            u32::from_be_bytes([info_data[0], info_data[1], info_data[2], info_data[3]]);
+        let firmware_version = u16::from_be_bytes([info_data[4], info_data[5]]);
 
         // Read Application ID register to determine firmware type
         let app_id_data = self.i2c.read_register(REG_APPLICATION_ID, 4)?;
@@ -388,7 +393,7 @@ impl XM125Radar {
 
     fn send_command(&mut self, command: u32) -> Result<()> {
         debug!("Sending command: 0x{command:08X}");
-        let cmd_bytes = command.to_le_bytes();
+        let cmd_bytes = command.to_be_bytes(); // Fixed: Use big-endian for XM125 commands
         self.i2c.write_register(REG_COMMAND, &cmd_bytes)?;
         Ok(())
     }
@@ -398,19 +403,19 @@ impl XM125Radar {
         let result_data = self.i2c.read_register(REG_DISTANCE_RESULT, 16)?;
 
         // Parse the result data (this format would need to match actual XM125 output)
-        let distance_mm = u32::from_le_bytes([
+        let distance_mm = u32::from_be_bytes([
             result_data[0],
             result_data[1],
             result_data[2],
             result_data[3],
         ]);
-        let strength_raw = u32::from_le_bytes([
+        let strength_raw = u32::from_be_bytes([
             result_data[4],
             result_data[5],
             result_data[6],
             result_data[7],
         ]);
-        let temperature = i16::from_le_bytes([result_data[8], result_data[9]]);
+        let temperature = i16::from_be_bytes([result_data[8], result_data[9]]);
 
         #[allow(clippy::cast_precision_loss)] // Converting mm to meters, precision loss acceptable
         let distance = distance_mm as f32 / 1000.0; // Convert mm to meters
@@ -621,11 +626,11 @@ impl XM125Radar {
         warn!("Configuration parameters are logged but not written to device registers");
 
         // TODO: Implement actual register writes when register addresses are confirmed:
-        // self.i2c.write_register(REG_PRESENCE_START, &start_mm.to_le_bytes())?;
-        // self.i2c.write_register(REG_PRESENCE_END, &end_mm.to_le_bytes())?;
-        // self.i2c.write_register(REG_INTRA_DETECTION_THRESHOLD, &intra_threshold.to_le_bytes())?;
-        // self.i2c.write_register(REG_INTER_DETECTION_THRESHOLD, &inter_threshold.to_le_bytes())?;
-        // self.i2c.write_register(REG_FRAME_RATE, &frame_rate.to_le_bytes())?;
+        // self.i2c.write_register(REG_PRESENCE_START, &start_mm.to_be_bytes())?;
+        // self.i2c.write_register(REG_PRESENCE_END, &end_mm.to_be_bytes())?;
+        // self.i2c.write_register(REG_INTRA_DETECTION_THRESHOLD, &intra_threshold.to_be_bytes())?;
+        // self.i2c.write_register(REG_INTER_DETECTION_THRESHOLD, &inter_threshold.to_be_bytes())?;
+        // self.i2c.write_register(REG_FRAME_RATE, &frame_rate.to_be_bytes())?;
     }
 
     /// Wait for calibration to complete
@@ -687,8 +692,15 @@ impl XM125Radar {
             ));
         }
 
-        // Send presence measurement command (use same as distance for now)
-        self.send_command(CMD_MEASURE_DISTANCE)?;
+        // Send presence detection command sequence
+        // 1. Apply configuration first
+        self.send_command(CMD_PRESENCE_APPLY_CONFIGURATION)?;
+
+        // Small delay for configuration to be applied
+        tokio::time::sleep(Duration::from_millis(10)).await;
+
+        // 2. Start measurement
+        self.send_command(CMD_PRESENCE_START)?;
 
         // Wait for measurement
         self.wait_for_measurement().await?;
@@ -700,7 +712,7 @@ impl XM125Radar {
         let inter_score_data = self.i2c.read_register(REG_INTER_PRESENCE_SCORE, 4)?;
 
         // Parse presence result (register 16/0x10)
-        let presence_result = u32::from_le_bytes([
+        let presence_result = u32::from_be_bytes([
             presence_result_data[0],
             presence_result_data[1],
             presence_result_data[2],
@@ -719,7 +731,7 @@ impl XM125Radar {
         }
 
         // Parse presence distance (register 17/0x11) - distance in mm
-        let distance_raw = u32::from_le_bytes([
+        let distance_raw = u32::from_be_bytes([
             presence_distance_data[0],
             presence_distance_data[1],
             presence_distance_data[2],
@@ -727,7 +739,7 @@ impl XM125Radar {
         ]);
 
         // Parse intra presence score (register 18/0x12) - fast motion
-        let intra_score_raw = u32::from_le_bytes([
+        let intra_score_raw = u32::from_be_bytes([
             intra_score_data[0],
             intra_score_data[1],
             intra_score_data[2],
@@ -735,7 +747,7 @@ impl XM125Radar {
         ]);
 
         // Parse inter presence score (register 19/0x13) - slow motion
-        let inter_score_raw = u32::from_le_bytes([
+        let inter_score_raw = u32::from_be_bytes([
             inter_score_data[0],
             inter_score_data[1],
             inter_score_data[2],
@@ -756,7 +768,6 @@ impl XM125Radar {
             presence_distance,
             intra_presence_score: intra_score,
             inter_presence_score: inter_score,
-            temperature: 0, // Temperature not available in presence registers
             timestamp: chrono::Utc::now(),
         })
     }
