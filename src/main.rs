@@ -412,6 +412,9 @@ async fn execute_command(
         Commands::Firmware { action } => {
             handle_firmware_command(action, cli).await?;
         }
+        Commands::Bootloader { reset } => {
+            handle_bootloader_command(reset, cli)?;
+        }
     }
 
     Ok(())
@@ -1095,4 +1098,76 @@ fn get_current_firmware_info_for_check(
         }
     }
 }
-// Test comment
+
+/// Handle bootloader command to put XM125 into bootloader mode
+fn handle_bootloader_command(reset: bool, cli: &Cli) -> Result<(), RadarError> {
+    // Check if control script exists
+    if !std::path::Path::new(&cli.control_script).exists() {
+        let error_msg = format!(
+            "Control script not found: {}\nBootloader mode requires GPIO control via the control script.",
+            cli.control_script
+        );
+        output_response(
+            cli,
+            "bootloader_error",
+            &error_msg,
+            "❌",
+            "Bootloader Error",
+        )?;
+        return Err(RadarError::DeviceError {
+            message: "Control script not available".to_string(),
+        });
+    }
+
+    info!("Putting XM125 module into bootloader mode...");
+
+    // Use the control script to put device into bootloader mode
+    let output = std::process::Command::new(&cli.control_script)
+        .arg("--bootloader")
+        .output()
+        .map_err(|e| RadarError::DeviceError {
+            message: format!("Failed to execute control script: {e}"),
+        })?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let error_msg = format!("Failed to enter bootloader mode: {stderr}");
+        output_response(
+            cli,
+            "bootloader_error",
+            &error_msg,
+            "❌",
+            "Bootloader Error",
+        )?;
+        return Err(RadarError::DeviceError { message: error_msg });
+    }
+
+    let success_msg = "✅ XM125 module is now in bootloader mode (I2C address 0x48)\n\
+         Use 'stm32flash' or firmware update commands to program the module.\n\
+         The module will remain in bootloader mode until reset or power cycled."
+        .to_string();
+    output_response(cli, "bootloader", &success_msg, "🔧", "Bootloader Mode")?;
+
+    // If reset flag is set, reset back to run mode
+    if reset {
+        info!("Resetting module back to run mode...");
+
+        let reset_output = std::process::Command::new(&cli.control_script)
+            .arg("--reset-run")
+            .output()
+            .map_err(|e| RadarError::DeviceError {
+                message: format!("Failed to execute reset command: {e}"),
+            })?;
+
+        if reset_output.status.success() {
+            let reset_msg = "✅ Module reset to run mode (I2C address 0x52)";
+            output_response(cli, "reset", reset_msg, "🔄", "Reset Complete")?;
+        } else {
+            let stderr = String::from_utf8_lossy(&reset_output.stderr);
+            let warning_msg = format!("⚠️  Reset to run mode failed: {stderr}");
+            output_response(cli, "reset_warning", &warning_msg, "⚠️", "Reset Warning")?;
+        }
+    }
+
+    Ok(())
+}

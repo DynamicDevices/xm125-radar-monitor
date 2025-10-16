@@ -53,6 +53,9 @@ COMMON EXAMPLES:
   # Continuous presence monitoring (10 samples, 500ms interval)
   xm125-radar-monitor monitor --count 10 --interval 500
 
+  # Put module into bootloader mode for firmware programming
+  xm125-radar-monitor bootloader
+
   # Use custom I2C bus and address
   xm125-radar-monitor -b 1 -a 0x53 status
 
@@ -283,6 +286,17 @@ pub enum Commands {
     Firmware {
         #[command(subcommand)]
         action: FirmwareAction,
+    },
+
+    /// Put XM125 module into bootloader mode for firmware programming
+    ///
+    /// Uses GPIO control to reset the module into bootloader mode (I2C address 0x48).
+    /// This is required for firmware programming with stm32flash. The module will
+    /// remain in bootloader mode until reset or power cycled.
+    Bootloader {
+        /// Reset to run mode after entering bootloader (for testing)
+        #[arg(short, long, help = "Reset back to run mode after bootloader entry")]
+        reset: bool,
     },
 }
 
