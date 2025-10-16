@@ -56,6 +56,9 @@ COMMON EXAMPLES:
   # Put module into bootloader mode for firmware programming
   xm125-radar-monitor bootloader
 
+  # Erase chip completely (requires confirmation)
+  xm125-radar-monitor firmware erase --confirm
+
   # Use custom I2C bus and address
   xm125-radar-monitor -b 1 -a 0x53 status
 
@@ -327,6 +330,17 @@ pub enum FirmwareAction {
     Verify {
         /// Firmware type to verify against
         firmware_type: Option<FirmwareType>,
+    },
+
+    /// Erase the XM125 chip completely
+    ///
+    /// This will completely erase all firmware from the XM125 module.
+    /// The module will need to be reprogrammed before it can be used again.
+    /// Use with caution - this operation cannot be undone.
+    Erase {
+        /// Confirm the erase operation (required for safety)
+        #[arg(long, help = "Confirm that you want to erase the chip (required)")]
+        confirm: bool,
     },
 }
 

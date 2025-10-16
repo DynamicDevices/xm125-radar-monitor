@@ -129,6 +129,14 @@ async fn run(cli: Cli) -> Result<(), RadarError> {
         return handle_bootloader_command(*reset, &cli);
     }
 
+    // Handle firmware erase command early (doesn't need I2C access for initial validation)
+    if let Some(cli::Commands::Firmware {
+        action: cli::FirmwareAction::Erase { confirm },
+    }) = &cli.command
+    {
+        return handle_firmware_erase_command(*confirm, &cli).await;
+    }
+
     // Create I2C connection to XM125
     let i2c_device_path = cli.get_i2c_device_path();
     debug!(
@@ -1020,6 +1028,12 @@ async fn handle_firmware_command(action: FirmwareAction, cli: &Cli) -> Result<()
                 }
             }
         }
+
+        FirmwareAction::Erase { .. } => {
+            // Erase command is handled early in run() function to avoid I2C initialization
+            // This case should never be reached, but is required for exhaustive pattern matching
+            unreachable!("Erase command should be handled early in run() function")
+        }
     }
 
     Ok(())
@@ -1236,6 +1250,53 @@ fn check_control_script(script_path: &str) -> Result<(), RadarError> {
                     ),
                 });
             }
+        }
+    }
+
+    Ok(())
+}
+
+/// Handle firmware erase command
+async fn handle_firmware_erase_command(confirm: bool, cli: &Cli) -> Result<(), RadarError> {
+    // Safety check - require explicit confirmation
+    if !confirm {
+        let error_msg = "❌ Chip erase requires explicit confirmation.\n\
+            Use: firmware erase --confirm\n\
+            ⚠️  WARNING: This will completely erase all firmware from the XM125 module!\n\
+            The module will need to be reprogrammed before it can be used again.";
+        output_response(cli, "erase_error", error_msg, "❌", "Erase Error")?;
+        return Ok(());
+    }
+
+    // Show warning and require additional confirmation in interactive mode
+    if !cli.quiet {
+        println!("⚠️  WARNING: You are about to completely erase the XM125 chip!");
+        println!("⚠️  This operation cannot be undone!");
+        println!("⚠️  The module will need firmware programming before it can be used again!");
+        println!();
+        println!("Proceeding with chip erase in 3 seconds...");
+        println!("Press Ctrl+C to cancel");
+
+        // Give user time to cancel
+        tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+    }
+
+    let firmware_manager =
+        FirmwareManager::new(&cli.firmware_path, &cli.control_script, cli.i2c_address);
+
+    info!("🗑️  Starting XM125 chip erase operation...");
+
+    match firmware_manager.erase_chip().await {
+        Ok(()) => {
+            let success_msg = "🗑️  XM125 chip has been completely erased!\n\
+                ⚠️  The module will need firmware programming before it can be used again.\n\
+                💡 Use 'firmware update <type>' to program new firmware.";
+            output_response(cli, "chip_erase", success_msg, "🗑️", "Chip Erase")?;
+        }
+        Err(e) => {
+            let error_msg = format!("❌ Chip erase failed: {e}");
+            output_response(cli, "erase_error", &error_msg, "❌", "Erase Error")?;
+            return Err(e);
         }
     }
 

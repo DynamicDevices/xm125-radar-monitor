@@ -428,6 +428,62 @@ impl FirmwareManager {
             Ok(false)
         }
     }
+
+    /// Erase the XM125 chip completely
+    pub async fn erase_chip(&self) -> Result<()> {
+        info!("🗑️  Starting XM125 chip erase operation...");
+
+        // Check control script first
+        self.check_control_script()?;
+
+        // Step 1: Put device into bootloader mode
+        info!("Step 1: Putting XM125 into bootloader mode...");
+        self.enter_bootloader_mode()?;
+
+        // Step 2: Wait for bootloader to be ready
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+
+        // Step 3: Erase chip using stm32flash
+        info!("Step 2: Erasing chip using stm32flash...");
+        let output = Command::new("stm32flash")
+            .args([
+                "-i",
+                "rts,-dtr,dtr:-rts,dtr", // Reset sequence
+                "-E",                    // Erase command
+                "/dev/i2c-2",            // I2C device
+                "-a",
+                "0x48", // I2C address (bootloader mode)
+            ])
+            .output()
+            .map_err(|e| RadarError::DeviceError {
+                message: format!("Failed to execute stm32flash for erase: {e}"),
+            })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            return Err(RadarError::DeviceError {
+                message: format!("Chip erase failed:\nstdout: {stdout}\nstderr: {stderr}"),
+            });
+        }
+
+        info!("✅ Chip erase completed successfully");
+
+        // Step 4: Reset to run mode (will fail since no firmware, but that's expected)
+        info!("Step 3: Attempting reset to run mode...");
+        match self.reset_to_run_mode().await {
+            Ok(()) => info!("Reset to run mode successful"),
+            Err(e) => {
+                info!("Reset to run mode failed (expected - no firmware): {e}");
+                // This is expected since we just erased the firmware
+            }
+        }
+
+        info!("🗑️  XM125 chip has been completely erased");
+        info!("⚠️  The module will need firmware programming before it can be used again");
+
+        Ok(())
+    }
 }
 
 impl Default for FirmwareManager {
