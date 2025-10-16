@@ -1,7 +1,7 @@
 # XM125 Radar Monitor - Hardware Testing Guide
 
 **Target Audience**: Technicians and Test Engineers  
-**Version**: v1.1.0  
+**Version**: v1.2.0  
 **Date**: October 2025  
 **Hardware**: Sentai i.MX8MM with XM125 Radar Module
 
@@ -10,21 +10,22 @@
 ### Prerequisites
 - Sentai board with XM125 radar module connected
 - SSH access to Sentai board (fio@62.3.79.162:26)
-- XM125 radar monitor v1.1.0 installed at `/usr/local/bin/xm125-radar-monitor`
+- XM125 radar monitor v1.2.0 installed at `/usr/local/bin/xm125-radar-monitor`
 
 ### Basic Test Sequence
 ```bash
-# 1. Check device status
+# 1. Check device status and current firmware
 sudo /usr/local/bin/xm125-radar-monitor status
+sudo /usr/local/bin/xm125-radar-monitor firmware check
 
-# 2. Test presence detection (known working baseline)
-sudo /usr/local/bin/xm125-radar-monitor --mode presence presence
+# 2. Test presence detection (auto-update firmware if needed)
+sudo /usr/local/bin/xm125-radar-monitor --mode presence --auto-update-firmware presence
 
-# 3. Test distance measurement
-sudo /usr/local/bin/xm125-radar-monitor --mode distance measure
+# 3. Test distance measurement (auto-update firmware if needed)
+sudo /usr/local/bin/xm125-radar-monitor --mode distance --auto-update-firmware measure
 
-# 4. Test breathing detection
-sudo /usr/local/bin/xm125-radar-monitor --mode breathing breathing
+# 4. Test breathing detection (auto-update firmware if needed)
+sudo /usr/local/bin/xm125-radar-monitor --mode breathing --auto-update-firmware breathing
 ```
 
 ## 📋 Detailed Test Procedures
@@ -40,7 +41,7 @@ sudo /usr/local/bin/xm125-radar-monitor status
 
 **Expected Output (Success)**:
 ```
-xm125-radar-monitor v1.1.0
+xm125-radar-monitor v1.2.0
 Copyright (c) 2025 Dynamic Devices Ltd. All rights reserved.
 XM125 Radar Module Monitor
 Mode: Distance | I2C: /dev/i2c-2 @ 0x52 | Auto-reconnect: ON
@@ -266,18 +267,82 @@ Status: Compatible with distance mode
 
 ---
 
+## 🔄 Firmware Management & Validation
+
+### Understanding Firmware Types
+
+The XM125 module requires different firmware binaries for different detection modes:
+
+| Detection Mode | Required Firmware | App ID | Binary File |
+|----------------|-------------------|--------|-------------|
+| **Distance** | Distance Detector | 1 | `i2c_distance_detector.bin` |
+| **Presence** | Presence Detector | 2 | `i2c_presence_detector.bin` |
+| **Breathing** | Breathing Monitor | 3 | `i2c_ref_app_breathing.bin` |
+| **Combined** | Presence Detector | 2 | `i2c_presence_detector.bin` |
+
+### Firmware Validation (New in v1.2.0)
+
+**The application now automatically validates firmware compatibility:**
+
+✅ **Correct Firmware**: Detection works normally  
+❌ **Wrong Firmware**: Clear error message with instructions  
+🔄 **Auto-Update**: Use `--auto-update-firmware` to automatically switch firmware
+
+### Firmware Commands
+
+```bash
+# Check current firmware
+sudo /usr/local/bin/xm125-radar-monitor firmware check
+
+# Manual firmware update
+sudo /usr/local/bin/xm125-radar-monitor firmware update --type presence
+
+# Verify firmware integrity
+sudo /usr/local/bin/xm125-radar-monitor firmware verify --type presence
+
+# List all firmware checksums
+sudo /usr/local/bin/xm125-radar-monitor firmware checksums
+```
+
+### Firmware Mismatch Examples
+
+**❌ Wrong Firmware Error**:
+```
+Error: Invalid command parameters: Firmware mismatch: Current firmware is 
+Distance Detector (App ID: 1), but presence mode requires Presence Detector 
+(App ID: 2). Use --auto-update-firmware to automatically update firmware, 
+or manually update with 'firmware update' command.
+```
+
+**✅ Auto-Update Solution**:
+```bash
+# This will automatically update firmware and run the test
+sudo /usr/local/bin/xm125-radar-monitor --mode presence --auto-update-firmware presence
+```
+
+**✅ Manual Update Solution**:
+```bash
+# Update firmware first, then run test
+sudo /usr/local/bin/xm125-radar-monitor firmware update --type presence
+sudo /usr/local/bin/xm125-radar-monitor --mode presence presence
+```
+
+---
+
 ## 🔧 Troubleshooting Guide
 
 ### Common Issues and Solutions
 
 | Issue | Symptoms | Solution |
 |-------|----------|----------|
+| **Firmware Mismatch** | `Firmware mismatch: Current firmware is...` | Use `--auto-update-firmware` flag or `firmware update --type <mode>` |
 | **Device Not Found** | `ENXIO: No such device or address` | Check I2C connections, run `sudo i2cdetect -y 2` |
 | **Permission Denied** | `Permission denied` error | Always run with `sudo` |
 | **Wrong Firmware** | Mode doesn't work as expected | Use `firmware check` and update if needed |
 | **Calibration Failed** | `Calibration timeout` error | Check hardware connections, try reset |
 | **No Detection** | Always shows 0.00m or NOT DETECTED | Check sensor orientation, remove obstructions |
 | **Inconsistent Readings** | Erratic distance/presence values | Check for vibrations, electromagnetic interference |
+| **Firmware Update Failed** | `Firmware update failed` | Check GPIO connections, verify binaries exist, try manual reset |
 
 ### Debug Commands
 

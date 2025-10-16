@@ -1,20 +1,21 @@
+// Allow pedantic clippy warnings for this module - many are false positives for embedded code
+#![allow(clippy::unreadable_literal)] // Hex constants are clearer in embedded context
+#![allow(clippy::cast_precision_loss)] // Acceptable precision loss for sensor data
+#![allow(clippy::cast_possible_truncation)] // Values are validated to be in range
+#![allow(clippy::cast_sign_loss)] // Values are validated to be positive
+#![allow(clippy::uninlined_format_args)] // Format args are clearer when separate
+#![allow(clippy::too_many_lines)] // Complex embedded protocols require long functions
+#![allow(clippy::unused_async)] // Some functions may become async in future
+#![allow(clippy::trivially_copy_pass_by_ref)] // Consistent API design
+#![allow(clippy::match_same_arms)] // Explicit fallback patterns for robustness
+
 use crate::error::{RadarError, Result};
 use crate::i2c::I2cDevice;
 use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
-// Allow pedantic clippy warnings for this module - many are false positives for embedded code
-#[allow(clippy::unreadable_literal)] // Hex constants are clearer in embedded context
-#[allow(clippy::cast_precision_loss)] // Acceptable precision loss for sensor data
-#[allow(clippy::cast_possible_truncation)] // Values are validated to be in range
-#[allow(clippy::cast_sign_loss)] // Values are validated to be positive
-#[allow(clippy::uninlined_format_args)] // Format args are clearer when separate
-#[allow(clippy::too_many_lines)] // Complex embedded protocols require long functions
-#[allow(clippy::unused_async)] // Some functions may become async in future
-#[allow(clippy::trivially_copy_pass_by_ref)] // Consistent API design
-#[allow(clippy::match_same_arms)] // Explicit fallback patterns for robustness
-                                  // XM125 I2C Register Addresses (from distance_reg_protocol.h)
+// XM125 I2C Register Addresses (from distance_reg_protocol.h)
 const REG_VERSION: u16 = 0; // DISTANCE_REG_VERSION_ADDRESS
 #[allow(dead_code)] // Reserved for protocol validation
 const REG_PROTOCOL_STATUS: u16 = 1; // DISTANCE_REG_PROTOCOL_STATUS_ADDRESS
@@ -742,6 +743,54 @@ impl XM125Radar {
         ]))
     }
 
+    /// Validate that the current firmware matches the requested detector mode
+    fn validate_firmware_compatibility(&mut self) -> Result<()> {
+        let current_app_id = self.read_application_id()?;
+        let expected_app_id = match self.config.detector_mode {
+            DetectorMode::Distance => 1,
+            DetectorMode::Presence => 2,
+            DetectorMode::Combined => 2, // Combined mode uses presence firmware
+            DetectorMode::Breathing => 3,
+        };
+
+        if current_app_id != expected_app_id {
+            let current_firmware = match current_app_id {
+                1 => "Distance Detector",
+                2 => "Presence Detector",
+                3 => "Breathing Monitor",
+                _ => "Unknown",
+            };
+
+            let expected_firmware = match expected_app_id {
+                1 => "Distance Detector",
+                2 => "Presence Detector",
+                3 => "Breathing Monitor",
+                _ => "Unknown",
+            };
+
+            return Err(RadarError::InvalidParameters(format!(
+                "Firmware mismatch: Current firmware is {} (App ID: {}), but {} mode requires {} (App ID: {}). Use --auto-update-firmware to automatically update firmware, or manually update with 'firmware update' command.",
+                current_firmware, current_app_id,
+                format!("{:?}", self.config.detector_mode).to_lowercase(),
+                expected_firmware, expected_app_id
+            )));
+        }
+
+        info!(
+            "Firmware validation passed: {} (App ID: {}) matches {:?} mode",
+            match current_app_id {
+                1 => "Distance Detector",
+                2 => "Presence Detector",
+                3 => "Breathing Monitor",
+                _ => "Unknown",
+            },
+            current_app_id,
+            self.config.detector_mode
+        );
+
+        Ok(())
+    }
+
     fn send_command(&mut self, command: u32) -> Result<()> {
         debug!("Sending command: 0x{command:08X}");
         let cmd_bytes = command.to_be_bytes(); // Fixed: Use big-endian for XM125 commands
@@ -1030,6 +1079,9 @@ impl XM125Radar {
             Ok(_) => {
                 self.is_connected = true;
                 info!("Successfully connected to XM125");
+
+                // Validate firmware matches the requested detector mode
+                self.validate_firmware_compatibility()?;
 
                 // Configure the detector based on current mode
                 self.configure_detector().await?;
