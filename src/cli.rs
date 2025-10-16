@@ -36,22 +36,22 @@ Supports both distance detection and presence detection modes with real-time mon
 TECHNICIAN QUICK START:
   1. Check device status:        ./xm125-radar-monitor status
   2. Get firmware info:          ./xm125-radar-monitor info  
-  3. Test presence detection:    ./xm125-radar-monitor --mode presence presence
-  4. Continuous monitoring:      ./xm125-radar-monitor --mode presence monitor --count 10
+  3. Test presence detection:    ./xm125-radar-monitor presence
+  4. Continuous monitoring:      ./xm125-radar-monitor monitor --count 10
   5. Save data to CSV:           ./xm125-radar-monitor monitor --save-to data.csv
 
 COMMON EXAMPLES:
-  # Check device status
+  # Check device status (shows actual firmware mode)
   xm125-radar-monitor status
+
+  # Test presence detection (default mode)
+  xm125-radar-monitor presence
 
   # Test distance measurement  
   xm125-radar-monitor --mode distance measure
 
-  # Test presence detection
-  xm125-radar-monitor --mode presence presence
-
   # Continuous presence monitoring (10 samples, 500ms interval)
-  xm125-radar-monitor --mode presence monitor --count 10 --interval 500
+  xm125-radar-monitor monitor --count 10 --interval 500
 
   # Use custom I2C bus and address
   xm125-radar-monitor -b 1 -a 0x53 status
@@ -101,7 +101,7 @@ pub struct Cli {
     pub quiet: bool,
 
     /// Detector mode: distance, presence, or combined measurements
-    #[arg(short = 'm', long, default_value = "distance")]
+    #[arg(short = 'm', long, default_value = "presence")]
     pub mode: DetectorMode,
 
     /// Enable auto-reconnect on connection failures (enabled by default)

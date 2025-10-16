@@ -61,6 +61,37 @@ fn print_banner(cli: &Cli) {
     println!();
 }
 
+fn print_banner_with_detected_mode(cli: &Cli, detected_mode: Option<&str>) {
+    println!("{APP_NAME} v{VERSION}");
+    println!("Copyright (c) 2025 Dynamic Devices Ltd. All rights reserved.");
+    println!("XM125 Radar Module Monitor");
+
+    // Show detected mode if available, otherwise CLI mode
+    let mode_str = if let Some(detected) = detected_mode {
+        detected
+    } else {
+        match cli.mode {
+            cli::DetectorMode::Distance => "Distance",
+            cli::DetectorMode::Presence => "Presence",
+            cli::DetectorMode::Combined => "Combined",
+            cli::DetectorMode::Breathing => "Breathing",
+        }
+    };
+
+    println!(
+        "Mode: {} | I2C: {} @ 0x{:02X} | Auto-reconnect: {}",
+        mode_str,
+        cli.get_i2c_device_path(),
+        cli.i2c_address,
+        if cli.auto_reconnect && !cli.no_auto_reconnect {
+            "ON"
+        } else {
+            "OFF"
+        }
+    );
+    println!();
+}
+
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
@@ -76,7 +107,9 @@ async fn main() {
         .filter_level(log_level)
         .init();
 
-    if !cli.quiet {
+    // Don't print banner here for status command - it will print its own with detected mode
+    let is_status_command = matches!(cli.command, Some(cli::Commands::Status));
+    if !cli.quiet && !is_status_command {
         print_banner(&cli);
     }
 
@@ -185,6 +218,20 @@ async fn execute_command(
 
     match command {
         Commands::Status => {
+            // For status command, detect actual firmware mode and show that instead of CLI default
+            let detected_mode = match get_current_firmware_info(radar) {
+                Ok(app_id) => {
+                    let firmware_type = firmware::FirmwareType::from_app_id(app_id);
+                    Some(firmware_type.display_name())
+                }
+                Err(_) => None, // If we can't detect, fall back to CLI mode
+            };
+
+            // Print banner with detected mode for status command
+            if !cli.quiet {
+                print_banner_with_detected_mode(cli, detected_mode);
+            }
+
             let status = radar.get_status()?;
             output_response(cli, "status", &status, "📊", "Radar Status")?;
         }
