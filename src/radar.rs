@@ -887,23 +887,67 @@ impl XM125Radar {
 
     /// Measure breathing patterns
     pub async fn measure_breathing(&mut self) -> Result<BreathingMeasurement> {
+        // Breathing detector needs much longer timeout:
+        // - 5 seconds for distance determination
+        // - 20 seconds for breathing rate estimation
+        // Total: 25+ seconds minimum
+        const BREATHING_TIMEOUT: Duration = Duration::from_secs(30);
+
         // Auto-connect if not connected and auto-reconnect is enabled
         if !self.is_connected && self.config.auto_reconnect {
             info!("Auto-connecting for breathing measurement...");
             self.auto_connect().await?;
         }
 
+        // Apply configuration first (this should have been done during connection, but ensure it's applied)
+        info!("Applying breathing detector configuration...");
+        self.send_command(CMD_BREATHING_APPLY_CONFIGURATION)?;
+
+        // Wait for configuration to be applied
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
         // Start breathing application
+        info!("Starting breathing analysis - this may take 25+ seconds for full analysis...");
         self.send_command(CMD_BREATHING_START_APP)?;
 
-        // Wait for measurement to complete
+        // Wait for breathing analysis to progress through states
         let start_time = Instant::now();
-        while start_time.elapsed() < MEASUREMENT_TIMEOUT {
+        let mut last_state_check = Instant::now();
+
+        while start_time.elapsed() < BREATHING_TIMEOUT {
             let status = self.get_status_raw()?;
-            if (status & STATUS_BUSY) == 0 {
-                break;
+
+            // Check app state periodically to show progress
+            if last_state_check.elapsed() > Duration::from_secs(2) {
+                let state_data = self.i2c.read_register(REG_BREATHING_APP_STATE, 4)?;
+                let state_raw = u32::from_be_bytes([
+                    state_data[0],
+                    state_data[1],
+                    state_data[2],
+                    state_data[3],
+                ]);
+                let app_state = BreathingAppState::from_u32(state_raw);
+
+                info!(
+                    "Breathing detector state: {:?} ({}s elapsed)",
+                    app_state,
+                    start_time.elapsed().as_secs()
+                );
+                last_state_check = Instant::now();
+
+                // If we reach EstimateBreathingRate state, we can try reading results
+                if matches!(app_state, BreathingAppState::EstimateBreathingRate) {
+                    info!("Breathing rate estimation phase reached - checking for results...");
+                }
             }
-            tokio::time::sleep(Duration::from_millis(10)).await;
+
+            // Check if not busy (but don't break immediately - breathing detector may cycle busy states)
+            if (status & STATUS_BUSY) == 0 {
+                // Give it a bit more time even when not busy, as breathing analysis is complex
+                tokio::time::sleep(Duration::from_millis(500)).await;
+            } else {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
         }
 
         // Read breathing result register (16/0x10)
