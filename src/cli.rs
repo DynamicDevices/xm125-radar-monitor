@@ -156,7 +156,7 @@ pub struct Cli {
     /// XM125 control script path
     #[arg(
         long,
-        default_value = "/home/fio/xm125-control.sh",
+        default_value = "/usr/bin/xm125-control.sh",
         help = "Path to XM125 GPIO control script"
     )]
     pub control_script: String,

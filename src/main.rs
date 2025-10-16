@@ -124,6 +124,11 @@ async fn main() {
 async fn run(cli: Cli) -> Result<(), RadarError> {
     debug!("Starting {APP_NAME} v{VERSION}");
 
+    // Handle bootloader command early (doesn't need I2C access)
+    if let Some(cli::Commands::Bootloader { reset }) = &cli.command {
+        return handle_bootloader_command(*reset, &cli);
+    }
+
     // Create I2C connection to XM125
     let i2c_device_path = cli.get_i2c_device_path();
     debug!(
@@ -759,7 +764,7 @@ async fn handle_firmware_command(action: FirmwareAction, cli: &Cli) -> Result<()
             let state = device_manager.check_device_presence().await;
 
             if !state.is_present {
-                let error_msg = "XM125 device not found on I2C bus. Use 'xm125-control.sh --reset-run' to reset device.";
+                let error_msg = "XM125 device not found on I2C bus. Use 'sudo /usr/bin/xm125-control.sh --reset-run' to reset device.";
                 output_response(cli, "device_not_found", error_msg, "❌", "Device Not Found")?;
                 return Ok(());
             }
@@ -829,7 +834,7 @@ async fn handle_firmware_command(action: FirmwareAction, cli: &Cli) -> Result<()
             let state = device_manager.check_device_presence().await;
 
             if !state.is_present {
-                let error_msg = "XM125 device not found on I2C bus. Use 'xm125-control.sh --reset-run' to reset device.";
+                let error_msg = "XM125 device not found on I2C bus. Use 'sudo /usr/bin/xm125-control.sh --reset-run' to reset device.";
                 output_response(cli, "device_not_found", error_msg, "❌", "Device Not Found")?;
                 return Ok(());
             }
@@ -1099,24 +1104,52 @@ fn get_current_firmware_info_for_check(
     }
 }
 
+/// Check if the control script exists and is executable
+fn check_control_script(script_path: &str) -> Result<(), RadarError> {
+    let path = std::path::Path::new(script_path);
+
+    if !path.exists() {
+        return Err(RadarError::DeviceError {
+            message: format!(
+                "XM125 control script not found: {script_path}\n\
+                This script is required for GPIO control and firmware operations.\n\
+                Please ensure the xm125-radar-monitor package is properly installed."
+            ),
+        });
+    }
+
+    // Check if it's executable (on Unix systems)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(metadata) = path.metadata() {
+            let permissions = metadata.permissions();
+            if permissions.mode() & 0o111 == 0 {
+                return Err(RadarError::DeviceError {
+                    message: format!(
+                        "XM125 control script is not executable: {script_path}\n\
+                        Run: sudo chmod +x {script_path}"
+                    ),
+                });
+            }
+        }
+    }
+
+    Ok(())
+}
+
 /// Handle bootloader command to put XM125 into bootloader mode
 fn handle_bootloader_command(reset: bool, cli: &Cli) -> Result<(), RadarError> {
-    // Check if control script exists
-    if !std::path::Path::new(&cli.control_script).exists() {
-        let error_msg = format!(
-            "Control script not found: {}\nBootloader mode requires GPIO control via the control script.",
-            cli.control_script
-        );
+    // Check if control script exists and is executable
+    if let Err(e) = check_control_script(&cli.control_script) {
         output_response(
             cli,
             "bootloader_error",
-            &error_msg,
+            &e.to_string(),
             "❌",
             "Bootloader Error",
         )?;
-        return Err(RadarError::DeviceError {
-            message: "Control script not available".to_string(),
-        });
+        return Err(e);
     }
 
     info!("Putting XM125 module into bootloader mode...");

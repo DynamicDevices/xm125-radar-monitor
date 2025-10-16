@@ -1720,7 +1720,20 @@ impl XM125Radar {
 
         info!("Executing XM125 reset to run mode...");
 
-        let output = Command::new("/home/fio/xm125-control.sh")
+        // Check if control script exists
+        let script_path = "/usr/bin/xm125-control.sh";
+        if !std::path::Path::new(script_path).exists() {
+            return Err(RadarError::DeviceError {
+                message: format!(
+                    "XM125 control script not found: {}\n\
+                    This script is required for GPIO control.\n\
+                    Please ensure the xm125-radar-monitor package is properly installed.",
+                    script_path
+                ),
+            });
+        }
+
+        let output = Command::new(script_path)
             .arg("--reset-run")
             .output()
             .map_err(|e| RadarError::DeviceError {

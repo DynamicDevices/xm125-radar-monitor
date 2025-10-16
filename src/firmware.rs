@@ -69,6 +69,42 @@ impl FirmwareManager {
         }
     }
 
+    /// Check if the control script exists and is accessible
+    pub fn check_control_script(&self) -> Result<()> {
+        let path = std::path::Path::new(&self.control_script);
+
+        if !path.exists() {
+            return Err(RadarError::FirmwareError {
+                message: format!(
+                    "XM125 control script not found: {}\n\
+                    This script is required for GPIO control and firmware operations.\n\
+                    Please ensure the xm125-radar-monitor package is properly installed.",
+                    self.control_script
+                ),
+            });
+        }
+
+        // Check if it's executable (on Unix systems)
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if let Ok(metadata) = path.metadata() {
+                let permissions = metadata.permissions();
+                if permissions.mode() & 0o111 == 0 {
+                    return Err(RadarError::FirmwareError {
+                        message: format!(
+                            "XM125 control script is not executable: {}\n\
+                            Run: sudo chmod +x {}",
+                            self.control_script, self.control_script
+                        ),
+                    });
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     /// Update firmware to the specified type (without verification)
     #[allow(dead_code)] // Kept for API compatibility
     pub async fn update_firmware(&self, firmware_type: FirmwareType) -> Result<()> {
@@ -89,6 +125,9 @@ impl FirmwareManager {
             "Updating XM125 firmware to {} ({binary_filename})",
             firmware_type.display_name()
         );
+
+        // Check control script first
+        self.check_control_script()?;
 
         // Verify firmware binary exists
         if !Path::new(&binary_path).exists() {
@@ -393,6 +432,6 @@ impl FirmwareManager {
 
 impl Default for FirmwareManager {
     fn default() -> Self {
-        Self::new("/lib/firmware/acconeer", "/home/fio/xm125-control.sh", 0x52)
+        Self::new("/lib/firmware/acconeer", "/usr/bin/xm125-control.sh", 0x52)
     }
 }
