@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.5.0] - 2025-10-16
+
+### Control Script Installation & Path Fixes
+- **🔧 Fixed Bootloader Command**: Restored missing `xm125-control.sh` and `xm125-firmware-flash.sh` scripts to Yocto recipe
+- **📁 Standard Path Installation**: Scripts now install to `/usr/bin/` instead of user home directories
+- **🚫 Removed Confusing Symlinks**: Eliminated symlinks that pointed to Rust binary instead of shell scripts
+- **🛡️ Enhanced Error Handling**: Added comprehensive validation when control script is missing or not executable
+- **⚡ Early Command Processing**: Handle bootloader command before I2C initialization to avoid permission errors
+
+### Technical Improvements
+- **📍 Updated Script Paths**: Changed hardcoded `/home/fio/` paths to standard `/usr/bin/` locations
+- **🔍 Script Validation**: Check script existence and executable permissions with clear error messages
+- **📋 Installation Instructions**: Provide helpful troubleshooting guidance when scripts are missing
+- **🎯 Proper Error Propagation**: Improved error handling throughout the application
+
+### Yocto Recipe Updates
+- **📦 Script Installation**: Added `xm125-control.sh` and `xm125-firmware-flash.sh` to recipe sources
+- **🗂️ Clean Package Structure**: Removed symlink confusion and properly package actual scripts
+- **✅ Production Ready**: Scripts installed with correct permissions in standard system locations
+
 ## [1.4.0] - 2025-10-16
 
 ### Status Command Enhancement & User Experience Improvements
