@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.4.0] - 2025-10-16
+
+### Status Command Enhancement & User Experience Improvements
+- **🎯 Smart Status Detection**: Status command now automatically detects and displays actual firmware mode instead of CLI default
+- **🔧 Default Mode Optimization**: Changed default mode from distance to presence to match typical hardware configurations
+- **📋 Improved Banner Logic**: Enhanced startup banner with accurate mode detection and cleaner output
+- **🚀 Seamless User Experience**: Eliminates confusion between CLI defaults and actual device firmware
+
+### Technical Improvements
+- **✅ Firmware Auto-Detection**: Reads Application ID register to determine installed firmware type
+- **🔄 Graceful Fallbacks**: Falls back to CLI mode if firmware detection fails
+- **📊 Accurate Status Reporting**: Status command shows "Presence Detector" when presence firmware is loaded
+- **🎨 Clean Output**: Prevents duplicate banners and provides consistent user interface
+
+### Deployment & Testing
+- **✅ Hardware Validated**: Successfully tested on Sentai target hardware
+- **🔧 Production Ready**: Deployed as v1.4.0 with comprehensive functionality testing
+- **📈 Improved Defaults**: Presence detection works out-of-the-box without mode specification
+
 ## [1.1.0] - 2025-10-16
 
 ### Complete Multi-Mode Detection Suite
