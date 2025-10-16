@@ -137,6 +137,18 @@ async fn run(cli: Cli) -> Result<(), RadarError> {
         return handle_firmware_erase_command(*confirm, &cli).await;
     }
 
+    // Handle firmware checksum command early (doesn't need I2C access)
+    if let Some(cli::Commands::Firmware {
+        action:
+            cli::FirmwareAction::Checksum {
+                firmware_type,
+                verbose,
+            },
+    }) = &cli.command
+    {
+        return handle_firmware_checksum_command(firmware_type.clone(), *verbose, &cli);
+    }
+
     // Create I2C connection to XM125
     let i2c_device_path = cli.get_i2c_device_path();
     debug!(
@@ -1029,6 +1041,12 @@ async fn handle_firmware_command(action: FirmwareAction, cli: &Cli) -> Result<()
             }
         }
 
+        FirmwareAction::Checksum { .. } => {
+            // Checksum command is handled early in run() function to avoid I2C initialization
+            // This case should never be reached, but is required for exhaustive pattern matching
+            unreachable!("Checksum command should be handled early in run() function")
+        }
+
         FirmwareAction::Erase { .. } => {
             // Erase command is handled early in run() function to avoid I2C initialization
             // This case should never be reached, but is required for exhaustive pattern matching
@@ -1251,6 +1269,121 @@ fn check_control_script(script_path: &str) -> Result<(), RadarError> {
                 });
             }
         }
+    }
+
+    Ok(())
+}
+
+/// Handle firmware checksum command
+fn handle_firmware_checksum_command(
+    firmware_type: Option<cli::FirmwareType>,
+    verbose: bool,
+    cli: &Cli,
+) -> Result<(), RadarError> {
+    let firmware_manager =
+        FirmwareManager::new(&cli.firmware_path, &cli.control_script, cli.i2c_address);
+
+    if let Some(fw_type) = firmware_type {
+        // Calculate checksum for specific firmware type
+        let target_firmware = firmware::FirmwareType::from(fw_type);
+
+        match firmware_manager.calculate_binary_checksum(target_firmware) {
+            Ok(checksum) => {
+                if verbose {
+                    // Show detailed information
+                    let binary_filename = target_firmware.binary_filename();
+                    let binary_path = format!("{}/{}", cli.firmware_path, binary_filename);
+
+                    let file_size = std::fs::metadata(&binary_path)
+                        .map(|m| m.len())
+                        .unwrap_or(0);
+
+                    let detailed_info = format!(
+                        "Firmware: {}\nFile: {}\nPath: {}\nSize: {} bytes\nMD5: {}",
+                        target_firmware.display_name(),
+                        binary_filename,
+                        binary_path,
+                        file_size,
+                        checksum
+                    );
+
+                    output_response(
+                        cli,
+                        "firmware_checksum_detailed",
+                        &detailed_info,
+                        "🔐",
+                        "Firmware Checksum",
+                    )?;
+                } else {
+                    // Show simple checksum
+                    let simple_info = format!("{}: {}", target_firmware.display_name(), checksum);
+                    output_response(
+                        cli,
+                        "firmware_checksum",
+                        &simple_info,
+                        "🔐",
+                        "Firmware Checksum",
+                    )?;
+                }
+            }
+            Err(e) => {
+                let error_msg = format!(
+                    "❌ Could not calculate checksum for {}: {}",
+                    target_firmware.display_name(),
+                    e
+                );
+                output_response(cli, "checksum_error", &error_msg, "❌", "Checksum Error")?;
+            }
+        }
+    } else {
+        // Calculate checksums for all firmware types
+        let firmware_types = [
+            firmware::FirmwareType::Distance,
+            firmware::FirmwareType::Presence,
+            firmware::FirmwareType::Breathing,
+        ];
+
+        let mut results = Vec::new();
+        let mut has_errors = false;
+
+        for fw_type in &firmware_types {
+            match firmware_manager.calculate_binary_checksum(*fw_type) {
+                Ok(checksum) => {
+                    if verbose {
+                        let binary_filename = fw_type.binary_filename();
+                        let binary_path = format!("{}/{}", cli.firmware_path, binary_filename);
+
+                        let file_size = std::fs::metadata(&binary_path)
+                            .map(|m| m.len())
+                            .unwrap_or(0);
+
+                        results.push(format!(
+                            "{}: {}\n  File: {} ({} bytes)",
+                            fw_type.display_name(),
+                            checksum,
+                            binary_filename,
+                            file_size
+                        ));
+                    } else {
+                        results.push(format!("{}: {}", fw_type.display_name(), checksum));
+                    }
+                }
+                Err(e) => {
+                    results.push(format!("{}: ❌ Error - {}", fw_type.display_name(), e));
+                    has_errors = true;
+                }
+            }
+        }
+
+        let all_results = results.join("\n");
+        let icon = if has_errors { "⚠️" } else { "🔐" };
+        let title = if has_errors {
+            "Firmware Checksums (with errors)"
+        } else {
+            "Firmware Checksums"
+        };
+
+        output_response(cli, "firmware_checksums_all", &all_results, icon, title)?;
     }
 
     Ok(())

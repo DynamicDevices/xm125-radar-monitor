@@ -59,6 +59,9 @@ COMMON EXAMPLES:
   # Erase chip completely (requires confirmation)
   xm125-radar-monitor firmware erase --confirm
 
+  # Calculate firmware checksums for verification
+  xm125-radar-monitor firmware checksum --verbose
+
   # Use custom I2C bus and address
   xm125-radar-monitor -b 1 -a 0x53 status
 
@@ -341,6 +344,21 @@ pub enum FirmwareAction {
         /// Confirm the erase operation (required for safety)
         #[arg(long, help = "Confirm that you want to erase the chip (required)")]
         confirm: bool,
+    },
+
+    /// Calculate and display firmware checksums
+    ///
+    /// Calculates MD5 checksums for firmware binary files to verify integrity
+    /// and compare different firmware versions. Useful for validation and
+    /// troubleshooting firmware-related issues.
+    Checksum {
+        /// Specific firmware type to checksum (if not specified, shows all)
+        #[arg(help = "Firmware type to checksum: distance, presence, or breathing")]
+        firmware_type: Option<FirmwareType>,
+
+        /// Show detailed information including file paths and sizes
+        #[arg(short, long, help = "Show detailed information about firmware files")]
+        verbose: bool,
     },
 }
 
