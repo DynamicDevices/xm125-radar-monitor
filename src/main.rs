@@ -120,6 +120,7 @@ async fn main() {
     }
 }
 
+#[allow(clippy::too_many_lines)] // Complex main function with comprehensive error handling
 async fn run(cli: Cli) -> Result<(), RadarError> {
     debug!("Starting {APP_NAME} v{VERSION}");
 
@@ -173,22 +174,43 @@ async fn run(cli: Cli) -> Result<(), RadarError> {
             }
             Err(e) => {
                 warn!("Could not check current firmware: {e}");
-                if cli.auto_update_firmware {
+
+                // Check if this might be an unprogrammed module before trying firmware update
+                if is_likely_unprogrammed_module(&cli) {
+                    print_unprogrammed_module_help(&cli);
+                    return Ok(());
+                }
+
+                // Try firmware update if control script exists
+                if std::path::Path::new(&cli.control_script).exists() {
                     info!("Proceeding with firmware update due to communication issues");
-                    firmware_manager
+                    match firmware_manager
                         .update_firmware_with_verification(
                             desired_firmware_type,
                             cli.auto_verify_firmware,
                         )
-                        .await?;
-
-                    // Recreate radar instance after firmware update
-                    let i2c_device_path = cli.get_i2c_device_path();
-                    let mut i2c_device = i2c::I2cDevice::new(&i2c_device_path, cli.i2c_address)?;
-                    if cli.wakeup_pin.is_some() || cli.int_pin.is_some() {
-                        i2c_device.configure_gpio(cli.wakeup_pin, cli.int_pin)?;
+                        .await
+                    {
+                        Ok(()) => {
+                            // Recreate radar instance after firmware update
+                            let i2c_device_path = cli.get_i2c_device_path();
+                            let mut i2c_device =
+                                i2c::I2cDevice::new(&i2c_device_path, cli.i2c_address)?;
+                            if cli.wakeup_pin.is_some() || cli.int_pin.is_some() {
+                                i2c_device.configure_gpio(cli.wakeup_pin, cli.int_pin)?;
+                            }
+                            radar = radar::XM125Radar::new(i2c_device);
+                        }
+                        Err(firmware_err) => {
+                            warn!("Firmware update failed: {firmware_err}");
+                            print_unprogrammed_module_help(&cli);
+                            return Ok(());
+                        }
                     }
-                    radar = radar::XM125Radar::new(i2c_device);
+                } else {
+                    warn!("Control script not found at: {}", cli.control_script);
+                    print_unprogrammed_module_help(&cli);
+                    return Ok(());
                 }
             }
         }
@@ -200,10 +222,33 @@ async fn run(cli: Cli) -> Result<(), RadarError> {
     // Execute command
     if let Some(cmd) = &cli.command {
         debug!("Executing command: {cmd:?}");
-        execute_command(cmd.clone(), &mut radar, &cli).await?;
-        Ok(())
+
+        // Handle unprogrammed modules gracefully
+        match execute_command(cmd.clone(), &mut radar, &cli).await {
+            Err(RadarError::I2c(_) | RadarError::NotConnected) => {
+                // Check if this might be an unprogrammed module
+                if is_likely_unprogrammed_module(&cli) {
+                    print_unprogrammed_module_help(&cli);
+                    Ok(())
+                } else {
+                    Err(RadarError::NotConnected)
+                }
+            }
+            result => result,
+        }
     } else {
-        println!("No command provided. Use --help for usage information.");
+        // No command provided - show help instead of trying to access I2C
+        if !cli.quiet {
+            println!("No command provided.\n");
+        }
+
+        // Print help using clap's built-in help
+        let mut cmd = {
+            use clap::CommandFactory;
+            Cli::command()
+        };
+        cmd.print_help()?;
+        println!(); // Add newline after help
         Ok(())
     }
 }
@@ -942,6 +987,84 @@ fn get_current_firmware_info(radar: &mut radar::XM125Radar) -> Result<u32, Radar
             Err(e)
         }
     }
+}
+
+/// Check if the module is likely unprogrammed by trying to detect it on I2C
+fn is_likely_unprogrammed_module(cli: &Cli) -> bool {
+    // Try to detect the module on the I2C bus using i2cdetect
+    let i2c_bus = cli.i2c_bus;
+    let address = cli.i2c_address;
+
+    // Check if i2cdetect is available
+    if std::process::Command::new("i2cdetect")
+        .arg("--help")
+        .output()
+        .map(|output| !output.status.success())
+        .unwrap_or(true)
+    {
+        // i2cdetect not available, assume it might be unprogrammed
+        return true;
+    }
+
+    // Check both run mode (0x52) and bootloader mode (0x48) addresses
+    let run_mode_detected = std::process::Command::new("i2cdetect")
+        .args([
+            "-y",
+            &i2c_bus.to_string(),
+            &format!("0x{address:02x}"),
+            &format!("0x{address:02x}"),
+        ])
+        .output()
+        .map(|output| {
+            output.status.success()
+                && String::from_utf8_lossy(&output.stdout).contains(&format!("{address:02x}"))
+        })
+        .unwrap_or(false);
+
+    let bootloader_detected = std::process::Command::new("i2cdetect")
+        .args(["-y", &i2c_bus.to_string(), "0x48", "0x48"])
+        .output()
+        .map(|output| {
+            output.status.success() && String::from_utf8_lossy(&output.stdout).contains("48")
+        })
+        .unwrap_or(false);
+
+    // If neither address responds, likely unprogrammed or not present
+    !run_mode_detected && !bootloader_detected
+}
+
+/// Print helpful instructions for unprogrammed modules
+fn print_unprogrammed_module_help(cli: &Cli) {
+    println!("❌ XM125 Module Not Found or Not Programmed");
+    println!();
+    println!(
+        "The XM125 radar module is not responding on I2C bus {} at address 0x{:02X}.",
+        cli.i2c_bus, cli.i2c_address
+    );
+    println!();
+    println!("🔧 Possible Solutions:");
+    println!();
+    println!("1. **Check Hardware Connection:**");
+    println!("   - Verify I2C connections (SDA, SCL, GND, VCC)");
+    println!("   - Ensure module is powered (3.3V)");
+    println!("   - Check I2C bus number: {}", cli.i2c_bus);
+    println!();
+    println!("2. **Reset Module to Run Mode:**");
+    println!("   sudo {} --reset-run", cli.control_script);
+    println!();
+    println!("3. **Program Module Firmware:**");
+    println!("   If this is a new/blank module, program it with presence firmware:");
+    println!("   sudo {APP_NAME} firmware update presence");
+    println!();
+    println!("4. **Scan I2C Bus:**");
+    println!("   sudo i2cdetect -y {}", cli.i2c_bus);
+    println!("   Look for devices at 0x48 (bootloader) or 0x52 (run mode)");
+    println!();
+    println!("5. **Check Permissions:**");
+    println!("   Ensure you're running with sudo for I2C access:");
+    println!("   sudo {APP_NAME} status");
+    println!();
+    println!("💡 For new modules, start with step 3 to program the firmware.");
 }
 
 /// Get current firmware info for firmware check command

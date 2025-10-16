@@ -40,6 +40,14 @@ pub enum RadarError {
 
     #[error("Distance measurement failed: {0}")]
     MeasurementFailed(String),
+
+    #[error("Firmware error: {message}")]
+    #[allow(dead_code)] // Reserved for firmware management error handling
+    FirmwareError { message: String },
+
+    #[error("XM125 module not programmed or not responding")]
+    #[allow(dead_code)] // Reserved for unprogrammed module detection
+    ModuleNotProgrammed,
 }
 
 pub type Result<T> = std::result::Result<T, RadarError>;
