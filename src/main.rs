@@ -21,12 +21,14 @@ use log::{debug, error, info, warn};
 use std::process;
 
 mod cli;
+mod device_manager;
 mod error;
 mod firmware;
 mod i2c;
 mod radar;
 
 use cli::{Cli, FirmwareAction};
+use device_manager::DeviceManager;
 use error::RadarError;
 use firmware::FirmwareManager;
 
@@ -647,43 +649,59 @@ async fn handle_firmware_command(action: FirmwareAction, cli: &Cli) -> Result<()
 
     match action {
         FirmwareAction::Check => {
-            // Create a temporary radar instance to read firmware info
-            let i2c_device_path = cli.get_i2c_device_path();
-            let i2c_device = i2c::I2cDevice::new(&i2c_device_path, cli.i2c_address)?;
-            let mut radar = radar::XM125Radar::new(i2c_device);
+            // Use the new device manager for clean firmware checking
+            let device_manager = DeviceManager::new(
+                cli.get_i2c_device_path(),
+                cli.i2c_address,
+                cli.firmware_path.clone(),
+                cli.control_script.clone(),
+            );
 
-            match get_current_firmware_info(&mut radar) {
-                Ok(app_id) => {
-                    let firmware_type = match app_id {
-                        1 => "Distance Detector",
-                        2 => "Presence Detector",
-                        3 => "Breathing Monitor",
-                        _ => "Unknown",
-                    };
+            let state = device_manager.check_device_presence().await;
 
-                    let response = format!("Current firmware: {firmware_type} (App ID: {app_id})");
-                    output_response(cli, "firmware_check", &response, "🔍", "Firmware Check")?;
+            if !state.is_present {
+                let error_msg = "XM125 device not found on I2C bus. Use 'xm125-control.sh --reset-run' to reset device.";
+                output_response(cli, "device_not_found", error_msg, "❌", "Device Not Found")?;
+                return Ok(());
+            }
 
-                    // Also try to get checksum if possible
-                    match firmware_manager.get_firmware_checksum() {
-                        Ok(checksum) => {
-                            let checksum_info = format!("Firmware checksum: {checksum}");
-                            output_response(
-                                cli,
-                                "firmware_checksum",
-                                &checksum_info,
-                                "🔐",
-                                "Checksum",
-                            )?;
-                        }
-                        Err(e) => {
-                            warn!("Could not read firmware checksum: {e}");
-                        }
+            if !state.is_responsive {
+                let warning_msg = "XM125 device present but not responsive. Device may need reset.";
+                output_response(
+                    cli,
+                    "device_unresponsive",
+                    warning_msg,
+                    "⚠️",
+                    "Device Unresponsive",
+                )?;
+                return Ok(());
+            }
+
+            // Device is present and responsive
+            if let (Some(firmware_type), Some(app_id)) = (state.firmware_type, state.app_id) {
+                let response = format!(
+                    "Current firmware: {} (App ID: {})",
+                    firmware_type.display_name(),
+                    app_id
+                );
+                output_response(cli, "firmware_check", &response, "✅", "Firmware Check")?;
+
+                // Try to get checksum
+                match firmware_manager.get_firmware_checksum(firmware_type) {
+                    Ok(checksum) => {
+                        let checksum_info = format!("Firmware checksum: {checksum}");
+                        output_response(
+                            cli,
+                            "firmware_checksum",
+                            &checksum_info,
+                            "🔐",
+                            "Checksum",
+                        )?;
                     }
-                }
-                Err(e) => {
-                    let error_msg = format!("Could not read firmware information: {e}");
-                    output_response(cli, "firmware_error", &error_msg, "❌", "Firmware Error")?;
+                    Err(e) => {
+                        debug!("Could not read firmware checksum: {e}");
+                        // Don't show this as an error to users - checksums are optional
+                    }
                 }
             }
         }
@@ -695,52 +713,68 @@ async fn handle_firmware_command(action: FirmwareAction, cli: &Cli) -> Result<()
         } => {
             let target_firmware = firmware::FirmwareType::from(firmware_type);
 
-            if !force {
-                // Check if update is actually needed
-                let i2c_device_path = cli.get_i2c_device_path();
-                let i2c_device = i2c::I2cDevice::new(&i2c_device_path, cli.i2c_address)?;
-                let mut radar = radar::XM125Radar::new(i2c_device);
+            // Use the new device manager for clean firmware updating
+            let device_manager = DeviceManager::new(
+                cli.get_i2c_device_path(),
+                cli.i2c_address,
+                cli.firmware_path.clone(),
+                cli.control_script.clone(),
+            );
 
-                match get_current_firmware_info(&mut radar) {
-                    Ok(current_app_id) => {
-                        if !firmware_manager
-                            .firmware_update_needed(current_app_id, target_firmware)?
-                        {
-                            let msg = format!(
-                                "Firmware already matches {} - no update needed",
-                                target_firmware.display_name()
-                            );
-                            output_response(cli, "firmware_update", &msg, "✅", "Firmware Update")?;
-                            return Ok(());
-                        }
-                    }
-                    Err(e) => {
-                        warn!("Could not verify current firmware, proceeding with update: {e}");
+            // Check current state first
+            let state = device_manager.check_device_presence().await;
+
+            if !state.is_present {
+                let error_msg = "XM125 device not found on I2C bus. Use 'xm125-control.sh --reset-run' to reset device.";
+                output_response(cli, "device_not_found", error_msg, "❌", "Device Not Found")?;
+                return Ok(());
+            }
+
+            // Check if update is needed (unless forced)
+            if !force {
+                if let Some(current_type) = state.firmware_type {
+                    if current_type == target_firmware {
+                        let msg = format!(
+                            "✅ Firmware already matches {} - no update needed",
+                            target_firmware.display_name()
+                        );
+                        output_response(cli, "firmware_update", &msg, "✅", "Firmware Update")?;
+                        return Ok(());
                     }
                 }
             }
 
+            // Perform the firmware update
             info!(
-                "Updating firmware to {} (forced: {}, verify: {})",
+                "🚀 Updating firmware to {} (forced: {}, verify: {})",
                 target_firmware.display_name(),
                 force,
                 verify
             );
-            firmware_manager
-                .update_firmware_with_verification(target_firmware, verify)
-                .await?;
 
-            let success_msg = format!(
-                "Successfully updated firmware to {}",
-                target_firmware.display_name()
-            );
-            output_response(
-                cli,
-                "firmware_update",
-                &success_msg,
-                "🚀",
-                "Firmware Update",
-            )?;
+            match device_manager
+                .update_firmware(target_firmware, verify)
+                .await
+            {
+                Ok(()) => {
+                    let success_msg = format!(
+                        "✅ Successfully updated firmware to {}",
+                        target_firmware.display_name()
+                    );
+                    output_response(
+                        cli,
+                        "firmware_update",
+                        &success_msg,
+                        "🚀",
+                        "Firmware Update",
+                    )?;
+                }
+                Err(e) => {
+                    let error_msg = format!("❌ Firmware update failed: {e}");
+                    output_response(cli, "firmware_error", &error_msg, "❌", "Firmware Error")?;
+                    return Err(e);
+                }
+            }
         }
 
         FirmwareAction::Verify { firmware_type } => {
@@ -751,7 +785,7 @@ async fn handle_firmware_command(action: FirmwareAction, cli: &Cli) -> Result<()
                     let target_firmware = firmware::FirmwareType::from(fw_type);
 
                     // Compare device checksum with binary checksum
-                    match firmware_manager.get_firmware_checksum() {
+                    match firmware_manager.get_firmware_checksum(target_firmware) {
                         Ok(device_checksum) => {
                             match firmware_manager.calculate_binary_checksum(target_firmware) {
                                 Ok(binary_checksum) => {
