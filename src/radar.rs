@@ -899,14 +899,7 @@ impl XM125Radar {
             self.auto_connect().await?;
         }
 
-        // Apply configuration first (this should have been done during connection, but ensure it's applied)
-        info!("Applying breathing detector configuration...");
-        self.send_command(CMD_BREATHING_APPLY_CONFIGURATION)?;
-
-        // Wait for configuration to be applied
-        tokio::time::sleep(Duration::from_millis(100)).await;
-
-        // Start breathing application
+        // Start breathing application (configuration was applied during connection)
         info!("Starting breathing analysis - this may take 25+ seconds for full analysis...");
         self.send_command(CMD_BREATHING_START_APP)?;
 
