@@ -1178,17 +1178,17 @@ impl XM125Radar {
             PresenceRange::Long => (0.5, 7.0),
         };
 
-        info!("Configuring presence detection parameters:");
-        info!("  Range: {start:.2}m - {end:.2}m");
-        info!(
+        debug!("Configuring presence detection parameters:");
+        debug!("  Range: {start:.2}m - {end:.2}m");
+        debug!(
             "  Intra threshold: {:.2}",
             self.config.intra_detection_threshold
         );
-        info!(
+        debug!(
             "  Inter threshold: {:.2}",
             self.config.inter_detection_threshold
         );
-        info!("  Frame rate: {:.1} Hz", self.config.frame_rate);
+        debug!("  Frame rate: {:.1} Hz", self.config.frame_rate);
 
         // Note: These register writes are estimated based on typical Acconeer patterns
         // The actual register addresses would need to be confirmed from official documentation
@@ -1212,8 +1212,10 @@ impl XM125Radar {
         let frame_rate = (self.config.frame_rate * 1000.0) as u32; // Convert to milliHz or similar
         debug!("  Frame rate: {frame_rate} -> register (not implemented)");
 
-        warn!("Presence configuration registers are not yet implemented - using firmware defaults");
-        warn!("Configuration parameters are logged but not written to device registers");
+        debug!(
+            "Presence configuration registers are not yet implemented - using firmware defaults"
+        );
+        debug!("Configuration parameters are logged but not written to device registers");
 
         // TODO: Implement actual register writes when register addresses are confirmed:
         // self.i2c.write_register(REG_PRESENCE_START, &start_mm.to_be_bytes())?;
