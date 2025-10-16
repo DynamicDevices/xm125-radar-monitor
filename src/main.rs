@@ -156,31 +156,75 @@ async fn run(cli: Cli) -> Result<(), RadarError> {
     if cli.auto_update_firmware {
         let desired_firmware_type = firmware::FirmwareType::from(cli.mode.clone());
 
-        // Try to read current firmware info
-        match get_current_firmware_info(&mut radar) {
-            Ok(current_app_id) => {
-                if firmware_manager.firmware_update_needed(current_app_id, desired_firmware_type)? {
-                    info!("Firmware update required for {:?} mode", cli.mode);
-                    firmware_manager
-                        .update_firmware_with_verification(
-                            desired_firmware_type,
-                            cli.auto_verify_firmware,
-                        )
-                        .await?;
+        // Check device presence first - it might be in bootloader mode
+        match check_device_presence(&cli) {
+            Ok(DeviceMode::RunMode) => {
+                // Device is in run mode, try to read current firmware info
+                match get_current_firmware_info(&mut radar) {
+                    Ok(current_app_id) => {
+                        if firmware_manager
+                            .firmware_update_needed(current_app_id, desired_firmware_type)?
+                        {
+                            info!("Firmware update required for {:?} mode", cli.mode);
+                            firmware_manager
+                                .update_firmware_with_verification(
+                                    desired_firmware_type,
+                                    cli.auto_verify_firmware,
+                                )
+                                .await?;
 
-                    // Recreate radar instance after firmware update
-                    let i2c_device_path = cli.get_i2c_device_path();
-                    let mut i2c_device = i2c::I2cDevice::new(&i2c_device_path, cli.i2c_address)?;
-                    if cli.wakeup_pin.is_some() || cli.int_pin.is_some() {
-                        i2c_device.configure_gpio(cli.wakeup_pin, cli.int_pin)?;
+                            // Recreate radar instance after firmware update
+                            let i2c_device_path = cli.get_i2c_device_path();
+                            let mut i2c_device =
+                                i2c::I2cDevice::new(&i2c_device_path, cli.i2c_address)?;
+                            if cli.wakeup_pin.is_some() || cli.int_pin.is_some() {
+                                i2c_device.configure_gpio(cli.wakeup_pin, cli.int_pin)?;
+                            }
+                            radar = radar::XM125Radar::new(i2c_device);
+                        }
                     }
-                    radar = radar::XM125Radar::new(i2c_device);
+                    Err(e) => {
+                        warn!("Could not read firmware info from run mode: {e}");
+                        // Proceed with firmware update anyway since device is present
+                        info!("Proceeding with firmware update due to communication issues");
+                        firmware_manager
+                            .update_firmware_with_verification(
+                                desired_firmware_type,
+                                cli.auto_verify_firmware,
+                            )
+                            .await?;
+
+                        // Recreate radar instance after firmware update
+                        let i2c_device_path = cli.get_i2c_device_path();
+                        let mut i2c_device =
+                            i2c::I2cDevice::new(&i2c_device_path, cli.i2c_address)?;
+                        if cli.wakeup_pin.is_some() || cli.int_pin.is_some() {
+                            i2c_device.configure_gpio(cli.wakeup_pin, cli.int_pin)?;
+                        }
+                        radar = radar::XM125Radar::new(i2c_device);
+                    }
                 }
             }
-            Err(e) => {
-                warn!("Could not check current firmware: {e}");
+            Ok(DeviceMode::BootloaderMode) => {
+                // Device is already in bootloader mode, proceed with firmware update
+                info!("Device detected in bootloader mode, proceeding with firmware update for {:?} mode", cli.mode);
+                firmware_manager
+                    .update_firmware_with_verification(
+                        desired_firmware_type,
+                        cli.auto_verify_firmware,
+                    )
+                    .await?;
 
-                // Check if this might be an unprogrammed module before trying firmware update
+                // Recreate radar instance after firmware update
+                let i2c_device_path = cli.get_i2c_device_path();
+                let mut i2c_device = i2c::I2cDevice::new(&i2c_device_path, cli.i2c_address)?;
+                if cli.wakeup_pin.is_some() || cli.int_pin.is_some() {
+                    i2c_device.configure_gpio(cli.wakeup_pin, cli.int_pin)?;
+                }
+                radar = radar::XM125Radar::new(i2c_device);
+            }
+            Err(_) => {
+                // Device not found in either mode
                 if is_likely_unprogrammed_module(&cli) {
                     print_unprogrammed_module_help(&cli);
                     return Ok(());
@@ -188,7 +232,7 @@ async fn run(cli: Cli) -> Result<(), RadarError> {
 
                 // Try firmware update if control script exists
                 if std::path::Path::new(&cli.control_script).exists() {
-                    info!("Proceeding with firmware update due to communication issues");
+                    info!("Device not detected, attempting firmware update anyway");
                     match firmware_manager
                         .update_firmware_with_verification(
                             desired_firmware_type,
@@ -995,6 +1039,66 @@ fn get_current_firmware_info(radar: &mut radar::XM125Radar) -> Result<u32, Radar
             Err(e)
         }
     }
+}
+
+/// Check if device is present in either run mode (0x52) or bootloader mode (0x48)
+fn check_device_presence(cli: &Cli) -> Result<DeviceMode, RadarError> {
+    let i2c_bus = cli.i2c_bus;
+    let run_mode_address = cli.i2c_address;
+
+    // Check if i2cdetect is available
+    if std::process::Command::new("i2cdetect")
+        .arg("--help")
+        .output()
+        .map(|output| !output.status.success())
+        .unwrap_or(true)
+    {
+        return Err(RadarError::DeviceError {
+            message: "i2cdetect utility not available for device detection".to_string(),
+        });
+    }
+
+    // Check run mode (0x52) first
+    let run_mode_detected = std::process::Command::new("i2cdetect")
+        .args([
+            "-y",
+            &i2c_bus.to_string(),
+            &format!("0x{run_mode_address:02x}"),
+            &format!("0x{run_mode_address:02x}"),
+        ])
+        .output()
+        .map(|output| {
+            output.status.success()
+                && String::from_utf8_lossy(&output.stdout)
+                    .contains(&format!("{run_mode_address:02x}"))
+        })
+        .unwrap_or(false);
+
+    if run_mode_detected {
+        return Ok(DeviceMode::RunMode);
+    }
+
+    // Check bootloader mode (0x48)
+    let bootloader_detected = std::process::Command::new("i2cdetect")
+        .args(["-y", &i2c_bus.to_string(), "0x48", "0x48"])
+        .output()
+        .map(|output| {
+            output.status.success() && String::from_utf8_lossy(&output.stdout).contains("48")
+        })
+        .unwrap_or(false);
+
+    if bootloader_detected {
+        return Ok(DeviceMode::BootloaderMode);
+    }
+
+    // Device not found in either mode
+    Err(RadarError::NotConnected)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum DeviceMode {
+    RunMode,
+    BootloaderMode,
 }
 
 /// Check if the module is likely unprogrammed by trying to detect it on I2C

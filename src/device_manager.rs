@@ -217,10 +217,28 @@ impl DeviceManager {
         match output {
             Ok(output) if output.status.success() => {
                 let stdout = String::from_utf8_lossy(&output.stdout);
-                let address_str = format!("{:02x}", self.i2c_address);
-                // Look for address with spaces around it (i2cdetect format: " 52 ")
-                let address_with_spaces = format!(" {} ", address_str);
-                stdout.contains(&address_with_spaces)
+
+                // Check for run mode address (typically 0x52)
+                let run_mode_address_str = format!("{:02x}", self.i2c_address);
+                let run_mode_with_spaces = format!(" {} ", run_mode_address_str);
+                let run_mode_detected = stdout.contains(&run_mode_with_spaces);
+
+                // Check for bootloader mode address (0x48)
+                let bootloader_detected = stdout.contains(" 48 ");
+
+                // Device is present if found in either mode
+                let present = run_mode_detected || bootloader_detected;
+
+                if present {
+                    if run_mode_detected {
+                        info!("✅ XM125 detected in run mode (0x{:02X})", self.i2c_address);
+                    }
+                    if bootloader_detected {
+                        info!("✅ XM125 detected in bootloader mode (0x48)");
+                    }
+                }
+
+                present
             }
             _ => false,
         }
