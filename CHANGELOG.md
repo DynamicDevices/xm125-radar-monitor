@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.5.1] - 2025-10-16
+
+### Firmware Update Bootloader Mode Fix
+- **🔧 Fixed Bootloader Detection**: Firmware update commands now detect device in bootloader mode (0x48) as well as run mode (0x52)
+- **⚡ Enhanced Device Detection**: Added comprehensive device presence checking for both I2C addresses
+- **🛡️ Improved Error Handling**: Better logic for handling devices already in bootloader mode during firmware updates
+- **📋 Better Logging**: Clear indication of which mode (run/bootloader) the device is detected in
+
+### Technical Improvements
+- **🔍 Dual-Mode Detection**: `check_device_presence()` function checks both 0x52 and 0x48 addresses
+- **🎯 Smart Update Logic**: Auto-update and explicit firmware update handle bootloader mode correctly
+- **📊 Enhanced DeviceManager**: Updated `check_i2c_bus_presence()` for comprehensive device detection
+- **🚀 Streamlined Flow**: Device in bootloader mode proceeds directly with firmware update
+
+### Bug Fixes
+- **❌ Fixed "Device Not Found" Error**: Resolved issue where `firmware update presence` failed when XM125 was in bootloader mode
+- **🔄 Improved State Handling**: Better handling of device state transitions during firmware operations
+
 ## [1.5.0] - 2025-10-16
 
 ### Control Script Installation & Path Fixes
