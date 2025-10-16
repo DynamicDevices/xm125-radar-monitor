@@ -39,6 +39,17 @@ impl FirmwareType {
             FirmwareType::Breathing => "Breathing Monitor",
         }
     }
+
+    /// Convert application ID to firmware type
+    #[allow(clippy::match_same_arms)] // Default fallback is intentional
+    pub fn from_app_id(app_id: u32) -> Self {
+        match app_id {
+            1 => FirmwareType::Distance,
+            2 => FirmwareType::Presence,
+            3 => FirmwareType::Breathing,
+            _ => FirmwareType::Distance, // Default fallback
+        }
+    }
 }
 
 /// XM125 Firmware Manager
@@ -92,18 +103,15 @@ impl FirmwareManager {
         // Step 2: Flash firmware using stm32flash
         self.flash_firmware(&binary_path)?;
 
-        // Step 3: Reset to run mode
+        // Step 3: Reset to run mode (includes verification and timing)
         self.reset_to_run_mode().await?;
 
         // Step 4: Optional verification
         if verify {
             info!("Verifying firmware installation...");
-            tokio::time::sleep(Duration::from_millis(2000)).await; // Allow device to initialize
             self.verify_firmware(firmware_type).await?;
         } else {
             info!("Skipping firmware verification (use --verify to enable)");
-            // Just give the device time to initialize without verification
-            tokio::time::sleep(Duration::from_millis(1000)).await;
         }
 
         info!(
@@ -144,6 +152,7 @@ impl FirmwareManager {
         info!("Flashing firmware: {binary_path}");
 
         // Use stm32flash to program the firmware via I2C
+        // Note: -g flag should make device jump to application, but we'll still do explicit reset
         let output = Command::new("stm32flash")
             .args([
                 "-w",
@@ -178,6 +187,9 @@ impl FirmwareManager {
             warn!("Firmware flashing may not have completed properly");
         }
 
+        // Give the device a moment to process the jump command
+        std::thread::sleep(std::time::Duration::from_millis(500));
+
         Ok(())
     }
 
@@ -202,7 +214,34 @@ impl FirmwareManager {
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         debug!("XM125 run mode output: {stdout}");
+
+        // Give the device time to fully initialize in run mode
+        tokio::time::sleep(Duration::from_millis(1500)).await;
+
+        // Verify the device is actually in run mode by checking I2C bus
+        if !self.verify_device_in_run_mode() {
+            warn!("Device may not be in run mode after reset, but continuing...");
+        }
+
         Ok(())
+    }
+
+    /// Verify device is in run mode by checking I2C bus
+    #[allow(clippy::unused_self)] // May use self for future enhancements
+    fn verify_device_in_run_mode(&self) -> bool {
+        use std::process::Command;
+
+        // Check if device is present at run mode address (0x52)
+        let output = Command::new("i2cdetect").args(["-y", "2"]).output();
+
+        match output {
+            Ok(output) if output.status.success() => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                // Look for address 52 (hex) in the i2cdetect output
+                stdout.contains(" 52 ")
+            }
+            _ => false,
+        }
     }
 
     /// Verify firmware was flashed correctly

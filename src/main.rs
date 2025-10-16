@@ -649,7 +649,7 @@ async fn handle_firmware_command(action: FirmwareAction, cli: &Cli) -> Result<()
 
     match action {
         FirmwareAction::Check => {
-            // Use the new device manager for clean firmware checking
+            // Use the device manager for basic device presence check
             let device_manager = DeviceManager::new(
                 cli.get_i2c_device_path(),
                 cli.i2c_address,
@@ -665,43 +665,48 @@ async fn handle_firmware_command(action: FirmwareAction, cli: &Cli) -> Result<()
                 return Ok(());
             }
 
-            if !state.is_responsive {
-                let warning_msg = "XM125 device present but not responsive. Device may need reset.";
-                output_response(
-                    cli,
-                    "device_unresponsive",
-                    warning_msg,
-                    "⚠️",
-                    "Device Unresponsive",
-                )?;
-                return Ok(());
-            }
+            // Device is present - now read firmware info directly using firmware manager
+            let firmware_manager =
+                FirmwareManager::new(&cli.firmware_path, &cli.control_script, cli.i2c_address);
 
-            // Device is present and responsive
-            if let (Some(firmware_type), Some(app_id)) = (state.firmware_type, state.app_id) {
-                let response = format!(
-                    "Current firmware: {} (App ID: {})",
-                    firmware_type.display_name(),
-                    app_id
-                );
-                output_response(cli, "firmware_check", &response, "✅", "Firmware Check")?;
+            // Try to read current firmware info
+            match get_current_firmware_info_for_check(cli) {
+                Ok((app_id, firmware_type)) => {
+                    let response = format!(
+                        "Current firmware: {} (App ID: {})",
+                        firmware_type.display_name(),
+                        app_id
+                    );
+                    output_response(cli, "firmware_check", &response, "✅", "Firmware Check")?;
 
-                // Try to get checksum
-                match firmware_manager.get_firmware_checksum(firmware_type) {
-                    Ok(checksum) => {
-                        let checksum_info = format!("Firmware checksum: {checksum}");
-                        output_response(
-                            cli,
-                            "firmware_checksum",
-                            &checksum_info,
-                            "🔐",
-                            "Checksum",
-                        )?;
+                    // Try to get checksum
+                    match firmware_manager.get_firmware_checksum(firmware_type) {
+                        Ok(checksum) => {
+                            let checksum_info = format!("Firmware checksum: {checksum}");
+                            output_response(
+                                cli,
+                                "firmware_checksum",
+                                &checksum_info,
+                                "🔐",
+                                "Checksum",
+                            )?;
+                        }
+                        Err(e) => {
+                            debug!("Could not read firmware checksum: {e}");
+                            // Don't show this as an error to users - checksums are optional
+                        }
                     }
-                    Err(e) => {
-                        debug!("Could not read firmware checksum: {e}");
-                        // Don't show this as an error to users - checksums are optional
-                    }
+                }
+                Err(e) => {
+                    let warning_msg =
+                        format!("XM125 device present but could not read firmware info: {e}");
+                    output_response(
+                        cli,
+                        "device_unresponsive",
+                        &warning_msg,
+                        "⚠️",
+                        "Device Communication Error",
+                    )?;
                 }
             }
         }
@@ -880,6 +885,35 @@ fn get_current_firmware_info(radar: &mut radar::XM125Radar) -> Result<u32, Radar
             // Read the application ID register directly
             let app_id_data = radar.read_application_id()?;
             Ok(app_id_data)
+        }
+        Err(e) => {
+            warn!("Could not connect to read firmware info: {e}");
+            Err(e)
+        }
+    }
+}
+
+/// Get current firmware info for firmware check command
+fn get_current_firmware_info_for_check(
+    cli: &Cli,
+) -> Result<(u32, firmware::FirmwareType), RadarError> {
+    // Create I2C device and radar instance for reading firmware info
+    let i2c_device_path = cli.get_i2c_device_path();
+    let mut i2c_device = i2c::I2cDevice::new(&i2c_device_path, cli.i2c_address)?;
+
+    // Configure GPIO if pins are specified
+    if cli.wakeup_pin.is_some() || cli.int_pin.is_some() {
+        i2c_device.configure_gpio(cli.wakeup_pin, cli.int_pin)?;
+    }
+
+    let mut radar = radar::XM125Radar::new(i2c_device);
+
+    // Try to connect and read application ID
+    match radar.connect() {
+        Ok(()) => {
+            let app_id = radar.read_application_id()?;
+            let firmware_type = firmware::FirmwareType::from_app_id(app_id);
+            Ok((app_id, firmware_type))
         }
         Err(e) => {
             warn!("Could not connect to read firmware info: {e}");

@@ -7,9 +7,7 @@
 
 use crate::error::{RadarError, Result};
 use crate::firmware::{FirmwareManager, FirmwareType};
-use crate::i2c::I2cDevice;
-use crate::radar::XM125Radar;
-use log::{info, warn};
+use log::info;
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -70,53 +68,15 @@ impl DeviceManager {
             i2c_bus, self.i2c_address
         );
 
-        // Try to communicate with device
-        match self.check_device_responsiveness().await {
-            Ok((app_id, firmware_type)) => {
-                info!(
-                    "✅ XM125 is responsive - {} (App ID: {})",
-                    firmware_type.display_name(),
-                    app_id
-                );
-                DeviceState {
-                    is_present: true,
-                    is_responsive: true,
-                    firmware_type: Some(firmware_type),
-                    app_id: Some(app_id),
-                    needs_reset: false,
-                }
-            }
-            Err(e) => {
-                warn!("⚠️  XM125 present but not responsive: {}", e);
-                DeviceState {
-                    is_present: true,
-                    is_responsive: false,
-                    firmware_type: None,
-                    app_id: None,
-                    needs_reset: true,
-                }
-            }
-        }
-    }
-
-    /// Check if device is responsive and read firmware info
-    async fn check_device_responsiveness(&self) -> Result<(u32, FirmwareType)> {
-        let i2c_device = I2cDevice::new(&self.i2c_device_path, self.i2c_address)?;
-        let mut radar = XM125Radar::new(i2c_device);
-
-        // Try to connect (with timeout)
-        let connect_result =
-            tokio::time::timeout(Duration::from_secs(3), async { radar.connect() }).await;
-
-        match connect_result {
-            Ok(Ok(())) => {
-                // Successfully connected, read application ID
-                let app_id = radar.read_application_id()?;
-                let firmware_type = FirmwareType::from_app_id(app_id);
-                Ok((app_id, firmware_type))
-            }
-            Ok(Err(e)) => Err(e),
-            Err(_) => Err(RadarError::Timeout { timeout: 3 }),
+        // Device is present on I2C bus - assume it's responsive
+        // Let the firmware manager handle detailed communication
+        info!("✅ XM125 detected and assumed responsive");
+        DeviceState {
+            is_present: true,
+            is_responsive: true, // Assume responsive if present
+            firmware_type: None, // Let firmware manager determine this
+            app_id: None,        // Let firmware manager determine this
+            needs_reset: false,
         }
     }
 
@@ -258,21 +218,11 @@ impl DeviceManager {
             Ok(output) if output.status.success() => {
                 let stdout = String::from_utf8_lossy(&output.stdout);
                 let address_str = format!("{:02x}", self.i2c_address);
-                stdout.contains(&address_str)
+                // Look for address with spaces around it (i2cdetect format: " 52 ")
+                let address_with_spaces = format!(" {} ", address_str);
+                stdout.contains(&address_with_spaces)
             }
             _ => false,
-        }
-    }
-}
-
-impl FirmwareType {
-    /// Convert application ID to firmware type
-    pub fn from_app_id(app_id: u32) -> Self {
-        match app_id {
-            1 => FirmwareType::Distance,
-            2 => FirmwareType::Presence,
-            3 => FirmwareType::Breathing,
-            _ => FirmwareType::Distance, // Default fallback
         }
     }
 }
