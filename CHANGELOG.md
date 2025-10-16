@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.1.0] - 2025-10-16
+
+### Complete Multi-Mode Detection Suite
+- **🫁 Breathing Detection**: Full implementation of breathing pattern analysis with BPM estimation
+- **📏 Distance Detection**: Precise range measurement with multi-peak analysis and CFAR processing
+- **👁️ Enhanced Presence Detection**: Improved motion detection with configurable sensitivity
+- **🔄 Unified CLI**: Seamless switching between all three detection modes with `--mode` parameter
+
+### Advanced Features
+- **📊 Comprehensive Documentation**: Detection modes comparison table and future applications roadmap
+- **🧪 Hardware Testing Guide**: Detailed technician procedures with expected outputs and troubleshooting
+- **🔧 Firmware Management**: Automatic detection and switching between distance/presence/breathing binaries
+- **📈 Continuous Monitoring**: Real-time measurement streaming with CSV export capabilities
+- **🎛️ Configuration Logging**: Detailed startup configuration display for all detection modes
+
+### Technical Achievements
+- **✅ Complete CI/CD**: All automated tests passing with comprehensive quality checks
+- **🚀 Production Deployment**: Successfully tested on Sentai hardware with all three modes
+- **📋 Professional Documentation**: Engineer-focused guides with practical testing workflows
+- **🔍 Hardware Validation**: Confirmed working on target hardware with GPIO control and I2C communication
+
+### Detection Modes Status
+- **✅ Presence Detection**: Fully tested and working (baseline functionality)
+- **✅ Distance Detection**: Implemented and hardware validated
+- **✅ Breathing Detection**: Implemented and hardware validated
+- **🎯 Future Modes**: Roadmap for 10+ additional detection modes (smart presence, tank level, parking, etc.)
+
 ## [1.0.0] - 2025-10-15
 
 ### Production Release
