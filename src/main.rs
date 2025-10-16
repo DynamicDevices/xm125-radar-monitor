@@ -35,6 +35,32 @@ use firmware::FirmwareManager;
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const APP_NAME: &str = env!("CARGO_PKG_NAME");
 
+fn print_banner(cli: &Cli) {
+    println!("{APP_NAME} v{VERSION}");
+    println!("Copyright (c) 2025 Dynamic Devices Ltd. All rights reserved.");
+    println!("XM125 Radar Module Monitor");
+
+    // Show key configuration at startup
+    let mode_str = match cli.mode {
+        cli::DetectorMode::Distance => "Distance",
+        cli::DetectorMode::Presence => "Presence",
+        cli::DetectorMode::Combined => "Combined",
+        cli::DetectorMode::Breathing => "Breathing",
+    };
+    println!(
+        "Mode: {} | I2C: {} @ 0x{:02X} | Auto-reconnect: {}",
+        mode_str,
+        cli.get_i2c_device_path(),
+        cli.i2c_address,
+        if cli.auto_reconnect && !cli.no_auto_reconnect {
+            "ON"
+        } else {
+            "OFF"
+        }
+    );
+    println!();
+}
+
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
@@ -51,29 +77,7 @@ async fn main() {
         .init();
 
     if !cli.quiet {
-        println!("{APP_NAME} v{VERSION}");
-        println!("Copyright (c) 2025 Dynamic Devices Ltd. All rights reserved.");
-        println!("XM125 Radar Module Monitor");
-
-        // Show key configuration at startup
-        let mode_str = match cli.mode {
-            cli::DetectorMode::Distance => "Distance",
-            cli::DetectorMode::Presence => "Presence",
-            cli::DetectorMode::Combined => "Combined",
-            cli::DetectorMode::Breathing => "Breathing",
-        };
-        println!(
-            "Mode: {} | I2C: /dev/i2c-{} @ 0x{:02X} | Auto-reconnect: {}",
-            mode_str,
-            cli.i2c_bus,
-            cli.i2c_address,
-            if cli.auto_reconnect && !cli.no_auto_reconnect {
-                "ON"
-            } else {
-                "OFF"
-            }
-        );
-        println!();
+        print_banner(&cli);
     }
 
     if let Err(e) = run(cli).await {
