@@ -21,6 +21,16 @@ impl Cli {
             format!("/dev/i2c-{}", self.i2c_bus)
         }
     }
+
+    /// Get GPIO pin configuration from command line arguments
+    pub fn get_gpio_pins(&self) -> crate::gpio::XM125GpioPins {
+        crate::gpio::XM125GpioPins {
+            reset: self.gpio_reset,
+            mcu_interrupt: self.gpio_mcu_int,
+            wake_up: self.gpio_wake,
+            boot: self.gpio_boot,
+        }
+    }
 }
 
 #[derive(Parser)]
@@ -64,6 +74,12 @@ COMMON EXAMPLES:
 
   # Use custom I2C bus and address
   xm125-radar-monitor -b 1 -a 0x53 status
+
+  # Use custom GPIO pins for different hardware
+  xm125-radar-monitor --gpio-reset 100 --gpio-boot 101 --gpio-wake 102 --gpio-mcu-int 103 status
+
+  # Test GPIO functionality without external scripts
+  xm125-radar-monitor gpio init
 
   # Enable debug logging for troubleshooting
   xm125-radar-monitor --verbose --mode presence presence
@@ -142,6 +158,38 @@ pub struct Cli {
         help = "GPIO pin for interrupt monitoring (e.g., 125 for Sentai)"
     )]
     pub int_pin: Option<u32>,
+
+    /// GPIO pin for XM125 reset control (active-low)
+    #[arg(
+        long,
+        default_value_t = 124,
+        help = "GPIO pin number for XM125 reset control (active-low) [default: 124 for Sentai]"
+    )]
+    pub gpio_reset: u32,
+
+    /// GPIO pin for XM125 MCU interrupt (input)
+    #[arg(
+        long,
+        default_value_t = 125,
+        help = "GPIO pin number for XM125 MCU interrupt input [default: 125 for Sentai]"
+    )]
+    pub gpio_mcu_int: u32,
+
+    /// GPIO pin for XM125 wake up control
+    #[arg(
+        long,
+        default_value_t = 139,
+        help = "GPIO pin number for XM125 wake up control [default: 139 for Sentai]"
+    )]
+    pub gpio_wake: u32,
+
+    /// GPIO pin for XM125 bootloader control (BOOT0)
+    #[arg(
+        long,
+        default_value_t = 141,
+        help = "GPIO pin number for XM125 bootloader control (BOOT0) [default: 141 for Sentai]"
+    )]
+    pub gpio_boot: u32,
 
     /// Enable automatic firmware updates when detector mode doesn't match
     #[arg(long, help = "Automatically update firmware if wrong type is detected")]
@@ -304,6 +352,16 @@ pub enum Commands {
         #[arg(short, long, help = "Reset back to run mode after bootloader entry")]
         reset: bool,
     },
+
+    /// GPIO control and testing commands
+    ///
+    /// Provides direct GPIO control for XM125 hardware management without
+    /// external script dependencies. Useful for testing hardware connections
+    /// and debugging GPIO-related issues.
+    Gpio {
+        #[command(subcommand)]
+        action: GpioAction,
+    },
 }
 
 #[derive(Clone, Debug, Subcommand)]
@@ -360,6 +418,24 @@ pub enum FirmwareAction {
         #[arg(short, long, help = "Show detailed information about firmware files")]
         verbose: bool,
     },
+}
+
+#[derive(Clone, Debug, Subcommand)]
+pub enum GpioAction {
+    /// Initialize GPIO pins and show status
+    Init,
+
+    /// Show current GPIO pin status
+    Status,
+
+    /// Reset XM125 to run mode
+    ResetRun,
+
+    /// Reset XM125 to bootloader mode
+    ResetBootloader,
+
+    /// Test bootloader control functionality
+    Test,
 }
 
 #[derive(Clone, Debug, ValueEnum)]

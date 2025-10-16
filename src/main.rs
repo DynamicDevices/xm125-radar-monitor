@@ -24,10 +24,11 @@ mod cli;
 mod device_manager;
 mod error;
 mod firmware;
+mod gpio;
 mod i2c;
 mod radar;
 
-use cli::{Cli, FirmwareAction};
+use cli::{Cli, FirmwareAction, GpioAction};
 use device_manager::DeviceManager;
 use error::RadarError;
 use firmware::FirmwareManager;
@@ -147,6 +148,11 @@ async fn run(cli: Cli) -> Result<(), RadarError> {
     }) = &cli.command
     {
         return handle_firmware_checksum_command(firmware_type.clone(), *verbose, &cli);
+    }
+
+    // Handle GPIO commands early (doesn't need I2C access)
+    if let Some(cli::Commands::Gpio { action }) = &cli.command {
+        return handle_gpio_command(action, &cli);
     }
 
     // Create I2C connection to XM125
@@ -483,6 +489,11 @@ async fn execute_command(
         }
         Commands::Bootloader { reset } => {
             handle_bootloader_command(reset, cli)?;
+        }
+        Commands::Gpio { .. } => {
+            // GPIO command is handled early in run() function to avoid I2C initialization
+            // This case should never be reached, but is required for exhaustive pattern matching
+            unreachable!("GPIO command should be handled early in run() function")
         }
     }
 
@@ -1268,6 +1279,72 @@ fn check_control_script(script_path: &str) -> Result<(), RadarError> {
                     ),
                 });
             }
+        }
+    }
+
+    Ok(())
+}
+
+/// Handle GPIO command
+fn handle_gpio_command(action: &GpioAction, cli: &Cli) -> Result<(), RadarError> {
+    let gpio_pins = cli.get_gpio_pins();
+    let mut gpio_controller = gpio::XM125GpioController::with_pins(gpio_pins);
+
+    match action {
+        GpioAction::Init => {
+            info!("🔧 Initializing XM125 GPIO pins...");
+            gpio_controller.initialize()?;
+            gpio_controller.show_gpio_status()?;
+            info!("✅ GPIO initialization completed successfully");
+        }
+        GpioAction::Status => {
+            // Try to show status even if not initialized
+            info!("📊 Current XM125 GPIO Status:");
+            println!("==========================");
+            println!(
+                "Reset (GPIO{}):     {} (1=released, 0=asserted)",
+                gpio_pins.reset,
+                gpio_controller
+                    .get_gpio_value(gpio_pins.reset)
+                    .map_or_else(|_| "?".to_string(), |v| format!("{v}"))
+            );
+            println!(
+                "MCU Int (GPIO{}):    {} (1=ready, 0=not ready)",
+                gpio_pins.mcu_interrupt,
+                gpio_controller
+                    .get_gpio_value(gpio_pins.mcu_interrupt)
+                    .map_or_else(|_| "?".to_string(), |v| format!("{v}"))
+            );
+            println!(
+                "Wake Up (GPIO{}):    {} (1=awake, 0=sleep)",
+                gpio_pins.wake_up,
+                gpio_controller
+                    .get_gpio_value(gpio_pins.wake_up)
+                    .map_or_else(|_| "?".to_string(), |v| format!("{v}"))
+            );
+            println!(
+                "Boot Pin (GPIO{}):   {} (1=bootloader, 0=run mode)",
+                gpio_pins.boot,
+                gpio_controller
+                    .get_gpio_value(gpio_pins.boot)
+                    .map_or_else(|_| "?".to_string(), |v| format!("{v}"))
+            );
+            println!();
+        }
+        GpioAction::ResetRun => {
+            gpio_controller.initialize()?;
+            gpio_controller.reset_to_run_mode()?;
+            gpio_controller.show_gpio_status()?;
+        }
+        GpioAction::ResetBootloader => {
+            gpio_controller.initialize()?;
+            gpio_controller.reset_to_bootloader_mode()?;
+            gpio_controller.show_gpio_status()?;
+        }
+        GpioAction::Test => {
+            gpio_controller.initialize()?;
+            gpio_controller.test_bootloader_control()?;
+            gpio_controller.show_gpio_status()?;
         }
     }
 
