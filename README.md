@@ -92,18 +92,163 @@ sudo ./xm125-radar-monitor firmware verify
 | **Registers** | 0x10 (packed), 0x11-0x1B (peaks) | 0x10-0x13 (separate) | 0x10 (result), 0x11-0x12 (data) |
 | **Calibration** | CFAR thresholds | Motion baselines | Presence + breathing analysis |
 
-## Configuration
+## Presence Detection Configuration
+
+### Command Line Options
+
+The XM125 Radar Monitor provides comprehensive configuration options for presence sensing:
+
+#### **1. Detection Range**
+```bash
+# Configure detection range with predefined presets
+--presence-range <RANGE>
+
+# Available options:
+--presence-range short    # 6cm to 70cm (close proximity)
+--presence-range medium   # 20cm to 2m (balanced)
+--presence-range long     # 50cm to 7m (maximum range - default)
+```
+
+#### **2. Detection Sensitivity**
+```bash
+# Adjust detection sensitivity threshold
+--sensitivity <VALUE>
+
+# Sensitivity values:
+# 0.1 = Low sensitivity (fewer false positives)
+# 0.5 = Medium sensitivity  
+# 2.0 = High sensitivity (more responsive)
+# Default: 1.3 (intra), 1.0 (inter)
+```
+
+#### **3. Frame Rate Configuration**
+```bash
+# Set measurement frequency in Hz
+--frame-rate <HZ>
+
+# Examples:
+--frame-rate 12.0    # 12 measurements per second (default)
+--frame-rate 20.0    # Higher frequency for faster response
+--frame-rate 5.0     # Lower frequency for power saving
+```
+
+### **Presence Configuration Examples**
+
+#### **Basic Presence Detection**
+```bash
+# Simple presence test with defaults
+sudo xm125-radar-monitor presence
+
+# Presence with verbose logging
+sudo xm125-radar-monitor --verbose --mode presence presence
+```
+
+#### **Custom Range Configuration**
+```bash
+# Short range for close proximity detection
+sudo xm125-radar-monitor --mode presence presence --presence-range short
+
+# Long range for room occupancy detection  
+sudo xm125-radar-monitor --mode presence presence --presence-range long
+```
+
+#### **Advanced Presence Configuration**
+```bash
+# High sensitivity, medium range, fast sampling
+sudo xm125-radar-monitor --mode presence presence \
+  --presence-range medium \
+  --sensitivity 2.0 \
+  --frame-rate 20.0
+
+# Low sensitivity, long range, power-efficient
+sudo xm125-radar-monitor --mode presence presence \
+  --presence-range long \
+  --sensitivity 0.5 \
+  --frame-rate 5.0
+```
+
+#### **Continuous Monitoring with Configuration**
+```bash
+# Monitor presence with custom settings and save to CSV
+sudo xm125-radar-monitor --mode presence monitor \
+  --presence-range medium \
+  --sensitivity 1.5 \
+  --frame-rate 15.0 \
+  --count 100 \
+  --interval 500 \
+  --save-to presence_data.csv
+```
+
+### **Range Comparison**
+
+| **Range** | **Distance** | **Best For** | **Power** | **Sensitivity** |
+|-----------|--------------|--------------|-----------|-----------------|
+| **Short** | 6cm - 70cm | Close proximity, desk sensors | Low | High |
+| **Medium** | 20cm - 2m | Personal space, small rooms | Medium | Balanced |
+| **Long** | 50cm - 7m | Room occupancy, large spaces | Higher | Lower |
+
+### **Default Presence Settings**
+
+| **Parameter** | **Default Value** | **Description** |
+|---------------|-------------------|-----------------|
+| **Range** | `long` | 50cm to 7m detection range |
+| **Intra Threshold** | `1.3` | Fast motion detection sensitivity |
+| **Inter Threshold** | `1.0` | Slow motion detection sensitivity |
+| **Frame Rate** | `12.0 Hz` | 12 measurements per second |
+| **Sweeps per Frame** | `16` | Signal processing parameter |
+
+## General Configuration
 
 Default settings optimized for Sentai hardware:
 - I2C bus: 2
 - Device address: 0x52
 - Auto-reconnect: enabled
-- Presence range: Long (0.5-7m)
+- GPIO pins: 124 (reset), 125 (interrupt), 139 (wake), 141 (boot)
 
 Override via CLI arguments:
 ```bash
+# I2C Configuration
 sudo ./xm125-radar-monitor -b 1 -a 0x53 --no-auto-reconnect status
+
+# Custom GPIO pins for different hardware
+sudo ./xm125-radar-monitor --gpio-reset 100 --gpio-boot 101 --gpio-wake 102 --gpio-mcu-int 103 status
+
+# GPIO control without external scripts
+sudo ./xm125-radar-monitor gpio init
 ```
+
+### **GPIO Control Commands**
+
+The tool includes internal GPIO control for hardware management without external script dependencies:
+
+```bash
+# Initialize GPIO pins and show status
+sudo ./xm125-radar-monitor gpio init
+
+# Show current GPIO pin status
+sudo ./xm125-radar-monitor gpio status
+
+# Reset XM125 to run mode
+sudo ./xm125-radar-monitor gpio reset-run
+
+# Reset XM125 to bootloader mode (for firmware programming)
+sudo ./xm125-radar-monitor gpio reset-bootloader
+
+# Test bootloader control functionality
+sudo ./xm125-radar-monitor gpio test
+```
+
+**GPIO Pin Configuration (Sentai defaults):**
+- Reset (GPIO124): `GPIO4_IO28` - Active-low reset control
+- MCU Int (GPIO125): `GPIO4_IO29` - Module ready signal input
+- Wake Up (GPIO139): `GPIO5_IO11` - Wake up control output
+- Boot Pin (GPIO141): `GPIO5_IO13` - Bootloader control (HIGH=bootloader, LOW=run)
+
+**Features:**
+- Platform-independent GPIO control via Linux sysfs interface
+- Automatic Foundries.io SPI conflict resolution for GPIO141
+- Proper STM32 reset timing sequences (10ms assert, 100ms startup)
+- Comprehensive error handling and status reporting
 
 ## Output Formats
 
@@ -125,9 +270,9 @@ Use `--verbose` for detailed I2C transaction logs.
 ## Dependencies
 
 - `stm32flash`: Firmware programming
-- `i2cdetect`, `i2cget`: I2C utilities
-- GPIO sysfs interface
-- Control script: `/home/fio/xm125-control.sh`
+- `i2cdetect`, `i2cget`: I2C utilities  
+- GPIO sysfs interface (Linux kernel)
+- **Internal GPIO Control**: No external scripts required (replaces `xm125-control.sh`)
 
 ## Future Applications
 
