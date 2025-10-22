@@ -1,11 +1,12 @@
 use crate::error::{RadarError, Result};
+use clap::ValueEnum;
 use log::{debug, info, warn};
 use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
 
 /// Firmware types supported by XM125
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, ValueEnum)]
 pub enum FirmwareType {
     Distance,
     Presence,

@@ -1,414 +1,167 @@
-/*
- * XM125 Radar Monitor - Embedded Rust application for XM125 radar module
- * Copyright (C) 2025 Dynamic Devices Ltd
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
+#![allow(dead_code)] // Allow dead code during restructure
 
+use chrono::Utc;
 use clap::Parser;
-use log::{debug, error, info, warn};
+use log::{error, info, warn};
+use std::env;
 use std::process;
 
 mod cli;
-mod device_manager;
 mod error;
 mod firmware;
 mod gpio;
 mod i2c;
 mod radar;
 
-use cli::{Cli, FirmwareAction, GpioAction, PresenceRange};
-use device_manager::DeviceManager;
+use cli::{Cli, Commands, FirmwareAction, GpioAction, PresenceRange};
 use error::RadarError;
-use firmware::FirmwareManager;
+use gpio::XM125GpioController;
+use radar::XM125Radar;
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
-const APP_NAME: &str = env!("CARGO_PKG_NAME");
-
-fn print_banner(cli: &Cli) {
-    println!("{APP_NAME} v{VERSION}");
-    println!("Copyright (c) 2025 Dynamic Devices Ltd. All rights reserved.");
-    println!("XM125 Radar Module Monitor");
-
-    // Show key configuration at startup
-    let mode_str = match cli.mode {
-        cli::DetectorMode::Distance => "Distance",
-        cli::DetectorMode::Presence => "Presence",
-        cli::DetectorMode::Combined => "Combined",
-        cli::DetectorMode::Breathing => "Breathing",
-    };
-    println!(
-        "Mode: {} | I2C: {} @ 0x{:02X} | Auto-reconnect: {}",
-        mode_str,
-        cli.get_i2c_device_path(),
-        cli.i2c_address,
-        if cli.auto_reconnect && !cli.no_auto_reconnect {
-            "ON"
-        } else {
-            "OFF"
-        }
-    );
-    println!();
-}
-
-fn print_banner_with_detected_mode(cli: &Cli, detected_mode: Option<&str>) {
-    println!("{APP_NAME} v{VERSION}");
-    println!("Copyright (c) 2025 Dynamic Devices Ltd. All rights reserved.");
-    println!("XM125 Radar Module Monitor");
-
-    // Show detected mode if available, otherwise CLI mode
-    let mode_str = if let Some(detected) = detected_mode {
-        detected
-    } else {
-        match cli.mode {
-            cli::DetectorMode::Distance => "Distance",
-            cli::DetectorMode::Presence => "Presence",
-            cli::DetectorMode::Combined => "Combined",
-            cli::DetectorMode::Breathing => "Breathing",
-        }
-    };
-
-    println!(
-        "Mode: {} | I2C: {} @ 0x{:02X} | Auto-reconnect: {}",
-        mode_str,
-        cli.get_i2c_device_path(),
-        cli.i2c_address,
-        if cli.auto_reconnect && !cli.no_auto_reconnect {
-            "ON"
-        } else {
-            "OFF"
-        }
-    );
-    println!();
-}
-
+/// Application entry point
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
 
     // Initialize logging
-    let log_level = if cli.verbose {
-        log::LevelFilter::Debug
+    if cli.verbose {
+        env::set_var("RUST_LOG", "debug");
     } else {
-        log::LevelFilter::Warn
-    };
-
-    env_logger::Builder::from_default_env()
-        .filter_level(log_level)
-        .init();
-
-    // Don't print banner here for status command - it will print its own with detected mode
-    let is_status_command = matches!(cli.command, Some(cli::Commands::Status));
-    if !cli.quiet && !is_status_command {
-        print_banner(&cli);
+        env::set_var("RUST_LOG", "info");
     }
+    env_logger::init();
 
+    // Run the application
     if let Err(e) = run(cli).await {
-        error!("Command failed: {e}");
-        eprintln!("Error: {e}");
+        error!("Application error: {e}");
         process::exit(1);
     }
 }
 
-#[allow(clippy::too_many_lines)] // Complex main function with comprehensive error handling
+/// Main application logic
 async fn run(cli: Cli) -> Result<(), RadarError> {
-    debug!("Starting {APP_NAME} v{VERSION}");
-
-    // Handle bootloader command early (doesn't need I2C access)
-    if let Some(cli::Commands::Bootloader { reset }) = &cli.command {
-        return handle_bootloader_command(*reset, &cli);
-    }
-
-    // Handle firmware erase command early (doesn't need I2C access for initial validation)
-    if let Some(cli::Commands::Firmware {
-        action: cli::FirmwareAction::Erase { confirm },
-    }) = &cli.command
-    {
-        return handle_firmware_erase_command(*confirm, &cli).await;
-    }
-
-    // Handle firmware checksum command early (doesn't need I2C access)
-    if let Some(cli::Commands::Firmware {
-        action:
-            cli::FirmwareAction::Checksum {
+    // Handle commands that don't need I2C connection first
+    match &cli.command {
+        Commands::Firmware { action } => match action {
+            FirmwareAction::Checksum {
                 firmware_type,
                 verbose,
-            },
-    }) = &cli.command
-    {
-        return handle_firmware_checksum_command(firmware_type.clone(), *verbose, &cli);
+            } => {
+                return handle_firmware_checksum_command(
+                    firmware_type.as_ref(),
+                    *verbose,
+                    &cli.firmware_path,
+                );
+            }
+            FirmwareAction::Erase { confirm } => {
+                return handle_firmware_erase_command(*confirm).await;
+            }
+            FirmwareAction::Bootloader { test_mode } => {
+                return handle_bootloader_command(&cli, *test_mode).await;
+            }
+            _ => {} // Other firmware commands need I2C connection
+        },
+        Commands::Gpio { action } => {
+            return handle_gpio_command(&cli, action);
+        }
+        _ => {} // Other commands need I2C connection
     }
 
-    // Handle GPIO commands early (doesn't need I2C access)
-    if let Some(cli::Commands::Gpio { action }) = &cli.command {
-        return handle_gpio_command(action, &cli);
-    }
-
-    // Create I2C connection to XM125
-    let i2c_device_path = cli.get_i2c_device_path();
-    debug!(
-        "Using I2C device: {} at address 0x{:02X}",
-        i2c_device_path, cli.i2c_address
-    );
-    let mut i2c_device = i2c::I2cDevice::new(&i2c_device_path, cli.i2c_address)?;
-
-    // Configure GPIO pins if provided
-    if cli.wakeup_pin.is_some() || cli.int_pin.is_some() {
-        debug!(
-            "Configuring GPIO pins: WAKEUP={:?}, INT={:?}",
-            cli.wakeup_pin, cli.int_pin
+    // Print startup banner unless quiet mode
+    if !cli.quiet {
+        println!("xm125-radar-monitor v{}", env!("CARGO_PKG_VERSION"));
+        println!("Copyright (c) 2025 Dynamic Devices Ltd. All rights reserved.");
+        println!("XM125 Radar Module Monitor");
+        println!(
+            "I2C: {} @ 0x{:02X} | Auto-reconnect: ON",
+            cli.get_i2c_device_path(),
+            cli.i2c_address
         );
-        i2c_device.configure_gpio(cli.wakeup_pin, cli.int_pin)?;
+        println!();
     }
 
-    let mut radar = radar::XM125Radar::new(i2c_device);
+    // Initialize I2C and radar
+    let i2c_device = i2c::I2cDevice::new(&cli.get_i2c_device_path(), cli.i2c_address)?;
+    let mut radar = XM125Radar::new(i2c_device);
 
-    // Create firmware manager
-    let firmware_manager =
-        FirmwareManager::new(&cli.firmware_path, &cli.control_script, cli.i2c_address);
+    // Execute the command
+    execute_command(&cli, &mut radar).await?;
 
-    // Check if firmware update is needed (if auto-update is enabled)
-    if cli.auto_update_firmware {
-        let desired_firmware_type = firmware::FirmwareType::from(cli.mode.clone());
-
-        // Check device presence first - it might be in bootloader mode
-        match check_device_presence(&cli) {
-            Ok(DeviceMode::RunMode) => {
-                // Device is in run mode, try to read current firmware info
-                match get_current_firmware_info(&mut radar) {
-                    Ok(current_app_id) => {
-                        if firmware_manager
-                            .firmware_update_needed(current_app_id, desired_firmware_type)?
-                        {
-                            info!("Firmware update required for {:?} mode", cli.mode);
-                            firmware_manager
-                                .update_firmware_with_verification(
-                                    desired_firmware_type,
-                                    cli.auto_verify_firmware,
-                                )
-                                .await?;
-
-                            // Recreate radar instance after firmware update
-                            let i2c_device_path = cli.get_i2c_device_path();
-                            let mut i2c_device =
-                                i2c::I2cDevice::new(&i2c_device_path, cli.i2c_address)?;
-                            if cli.wakeup_pin.is_some() || cli.int_pin.is_some() {
-                                i2c_device.configure_gpio(cli.wakeup_pin, cli.int_pin)?;
-                            }
-                            radar = radar::XM125Radar::new(i2c_device);
-                        }
-                    }
-                    Err(e) => {
-                        warn!("Could not read firmware info from run mode: {e}");
-                        // Proceed with firmware update anyway since device is present
-                        info!("Proceeding with firmware update due to communication issues");
-                        firmware_manager
-                            .update_firmware_with_verification(
-                                desired_firmware_type,
-                                cli.auto_verify_firmware,
-                            )
-                            .await?;
-
-                        // Recreate radar instance after firmware update
-                        let i2c_device_path = cli.get_i2c_device_path();
-                        let mut i2c_device =
-                            i2c::I2cDevice::new(&i2c_device_path, cli.i2c_address)?;
-                        if cli.wakeup_pin.is_some() || cli.int_pin.is_some() {
-                            i2c_device.configure_gpio(cli.wakeup_pin, cli.int_pin)?;
-                        }
-                        radar = radar::XM125Radar::new(i2c_device);
-                    }
-                }
-            }
-            Ok(DeviceMode::BootloaderMode) => {
-                // Device is already in bootloader mode, proceed with firmware update
-                info!("Device detected in bootloader mode, proceeding with firmware update for {:?} mode", cli.mode);
-                firmware_manager
-                    .update_firmware_with_verification(
-                        desired_firmware_type,
-                        cli.auto_verify_firmware,
-                    )
-                    .await?;
-
-                // Recreate radar instance after firmware update
-                let i2c_device_path = cli.get_i2c_device_path();
-                let mut i2c_device = i2c::I2cDevice::new(&i2c_device_path, cli.i2c_address)?;
-                if cli.wakeup_pin.is_some() || cli.int_pin.is_some() {
-                    i2c_device.configure_gpio(cli.wakeup_pin, cli.int_pin)?;
-                }
-                radar = radar::XM125Radar::new(i2c_device);
-            }
-            Err(_) => {
-                // Device not found in either mode
-                if is_likely_unprogrammed_module(&cli) {
-                    print_unprogrammed_module_help(&cli);
-                    return Ok(());
-                }
-
-                // Try firmware update if control script exists
-                if std::path::Path::new(&cli.control_script).exists() {
-                    info!("Device not detected, attempting firmware update anyway");
-                    match firmware_manager
-                        .update_firmware_with_verification(
-                            desired_firmware_type,
-                            cli.auto_verify_firmware,
-                        )
-                        .await
-                    {
-                        Ok(()) => {
-                            // Recreate radar instance after firmware update
-                            let i2c_device_path = cli.get_i2c_device_path();
-                            let mut i2c_device =
-                                i2c::I2cDevice::new(&i2c_device_path, cli.i2c_address)?;
-                            if cli.wakeup_pin.is_some() || cli.int_pin.is_some() {
-                                i2c_device.configure_gpio(cli.wakeup_pin, cli.int_pin)?;
-                            }
-                            radar = radar::XM125Radar::new(i2c_device);
-                        }
-                        Err(firmware_err) => {
-                            warn!("Firmware update failed: {firmware_err}");
-                            print_unprogrammed_module_help(&cli);
-                            return Ok(());
-                        }
-                    }
-                } else {
-                    warn!("Control script not found at: {}", cli.control_script);
-                    print_unprogrammed_module_help(&cli);
-                    return Ok(());
-                }
-            }
-        }
-    }
-
-    // Configure radar based on CLI options
-    configure_radar_from_cli(&mut radar, &cli).await?;
-
-    // Execute command
-    if let Some(cmd) = &cli.command {
-        debug!("Executing command: {cmd:?}");
-
-        // Handle unprogrammed modules gracefully
-        match execute_command(cmd.clone(), &mut radar, &cli).await {
-            Err(RadarError::I2c(_) | RadarError::NotConnected) => {
-                // Check if this might be an unprogrammed module
-                if is_likely_unprogrammed_module(&cli) {
-                    print_unprogrammed_module_help(&cli);
-                    Ok(())
-                } else {
-                    Err(RadarError::NotConnected)
-                }
-            }
-            result => result,
-        }
-    } else {
-        // No command provided - show help instead of trying to access I2C
-        if !cli.quiet {
-            println!("No command provided.\n");
-        }
-
-        // Print help using clap's built-in help
-        let mut cmd = {
-            use clap::CommandFactory;
-            Cli::command()
-        };
-        cmd.print_help()?;
-        println!(); // Add newline after help
-        Ok(())
-    }
+    Ok(())
 }
 
+/// Execute the main command logic
 #[allow(clippy::too_many_lines)]
-async fn execute_command(
-    command: cli::Commands,
-    radar: &mut radar::XM125Radar,
-    cli: &Cli,
-) -> Result<(), RadarError> {
-    use cli::Commands;
-
-    match command {
+async fn execute_command(cli: &Cli, radar: &mut XM125Radar) -> Result<(), RadarError> {
+    match &cli.command {
         Commands::Status => {
-            // For status command, detect actual firmware mode and show that instead of CLI default
-            let detected_mode = match get_current_firmware_info(radar) {
-                Ok(app_id) => {
-                    let firmware_type = firmware::FirmwareType::from_app_id(app_id);
-                    Some(firmware_type.display_name())
-                }
-                Err(_) => None, // If we can't detect, fall back to CLI mode
-            };
-
-            // Print banner with detected mode for status command
-            if !cli.quiet {
-                print_banner_with_detected_mode(cli, detected_mode);
-            }
-
             let status = radar.get_status()?;
-            output_response(cli, "status", &status, "📊", "Radar Status")?;
-        }
-        Commands::Connect { force } => {
-            let auto_reconnect = cli.auto_reconnect && !cli.no_auto_reconnect;
-            if force {
-                if auto_reconnect {
-                    radar.auto_connect().await?;
-                } else {
-                    radar.connect_async().await?;
+            match cli.format {
+                cli::OutputFormat::Json => {
+                    let status_obj = serde_json::json!({ "status": status });
+                    println!("{}", serde_json::to_string_pretty(&status_obj)?);
                 }
-            } else {
-                radar.connect()?;
+                cli::OutputFormat::Csv => {
+                    println!("status");
+                    println!("{status}");
+                }
+                cli::OutputFormat::Human => {
+                    println!("📡 XM125 Status: {status}");
+                }
             }
-            output_response(cli, "connect", "Connected successfully", "🔗", "Connection")?;
         }
-        Commands::Disconnect => {
-            radar.disconnect();
-            output_response(
-                cli,
-                "disconnect",
-                "Disconnected successfully",
-                "🔌",
-                "Disconnection",
-            )?;
-        }
+
         Commands::Info => {
             let info = radar.get_info()?;
-            output_response(cli, "info", &info, "ℹ️", "Device Information")?;
+            match cli.format {
+                cli::OutputFormat::Json => {
+                    let info_obj = serde_json::json!({ "info": info });
+                    println!("{}", serde_json::to_string_pretty(&info_obj)?);
+                }
+                cli::OutputFormat::Csv => {
+                    println!("info");
+                    println!("{info}");
+                }
+                cli::OutputFormat::Human => {
+                    println!("🔍 XM125 Device Information:");
+                    println!("{info}");
+                }
+            }
         }
-        Commands::Measure => {
-            let result = radar.measure_distance().await?;
-            let response = format!(
-                "Distance: {:.2}m, Strength: {:.1}dB, Temperature: {}°C",
-                result.distance, result.strength, result.temperature
-            );
-            output_response(cli, "measure", &response, "📏", "Distance Measurement")?;
-        }
-        Commands::Calibrate => {
-            radar.calibrate().await?;
-            output_response(
-                cli,
-                "calibrate",
-                "Calibration completed successfully",
-                "🎯",
-                "Calibration",
-            )?;
-        }
-        Commands::Monitor {
-            interval,
+
+        Commands::Distance {
+            range,
+            continuous,
             count,
-            save_to: _,
+            interval,
+            save_to,
         } => {
-            monitor_measurements(radar, cli, interval, count).await?;
+            // Ensure device is in distance mode
+            radar
+                .set_detector_mode(radar::DetectorMode::Distance)
+                .await?;
+
+            // Configure range if specified
+            if let Some(range_str) = range {
+                configure_distance_range(radar, range_str)?;
+            }
+
+            // Debug registers if requested (global option)
+            if cli.debug_registers {
+                debug_registers_if_connected(radar, "Distance");
+            }
+
+            if *continuous {
+                monitor_distance_continuous(radar, cli, *count, *interval, save_to.as_deref())
+                    .await?;
+            } else {
+                let result = radar.measure_distance().await?;
+                display_distance_result(&result, &cli.format);
+            }
         }
+
         Commands::Presence {
-            presence_range,
+            range,
             min_range,
             max_range,
             sensitivity,
@@ -418,538 +171,82 @@ async fn execute_command(
             interval,
             save_to,
         } => {
-            // Configure presence parameters if specified
+            // Ensure device is in presence mode
+            radar
+                .set_detector_mode(radar::DetectorMode::Presence)
+                .await?;
+
+            // Configure presence parameters
             configure_presence_parameters(
                 radar,
-                presence_range.as_ref(),
-                min_range,
-                max_range,
-                sensitivity,
-                frame_rate,
+                range.as_ref(),
+                *min_range,
+                *max_range,
+                *sensitivity,
+                *frame_rate,
             )?;
 
-            // Debug registers after configuration if requested
+            // Debug registers if requested (global option)
             if cli.debug_registers {
-                info!(
-                    "🔍 Debug registers requested, radar connected: {}",
-                    radar.is_connected()
-                );
-                if radar.is_connected() {
-                    match radar.debug_registers("Presence") {
-                        Ok(()) => info!("✅ Register debugging completed successfully"),
-                        Err(e) => {
-                            eprintln!("❌ Failed to debug registers: {e}");
-                            warn!("Failed to debug registers: {e}");
-                        }
-                    }
-                } else {
-                    eprintln!("❌ Cannot debug registers: radar not connected");
-                }
+                debug_registers_if_connected(radar, "Presence");
             }
 
-            if continuous {
-                // Continuous monitoring mode
-                monitor_presence_continuous(radar, cli, count, interval, save_to.as_deref())
+            if *continuous {
+                monitor_presence_continuous(radar, cli, *count, *interval, save_to.as_deref())
                     .await?;
             } else {
-                // Single measurement mode
                 let result = radar.measure_presence().await?;
-                let response = format!(
-                    "Presence: {}, Distance: {:.2}m, Intra: {:.2}, Inter: {:.2}",
-                    if result.presence_detected {
-                        "DETECTED"
-                    } else {
-                        "NOT DETECTED"
-                    },
-                    result.presence_distance,
-                    result.intra_presence_score,
-                    result.inter_presence_score
-                );
-                output_response(cli, "presence", &response, "👁️", "Presence Detection")?;
+                display_presence_result(&result, &cli.format);
             }
         }
-        Commands::Combined => {
-            let result = radar.measure_combined().await?;
-            let mut response_parts = Vec::new();
 
-            if let Some(distance) = &result.distance {
-                response_parts.push(format!(
-                    "Distance: {:.2}m ({:.1}dB)",
-                    distance.distance, distance.strength
-                ));
-            }
-
-            if let Some(presence) = &result.presence {
-                response_parts.push(format!(
-                    "Presence: {} at {:.2}m (intra: {:.2}, inter: {:.2})",
-                    if presence.presence_detected {
-                        "DETECTED"
-                    } else {
-                        "NOT DETECTED"
-                    },
-                    presence.presence_distance,
-                    presence.intra_presence_score,
-                    presence.inter_presence_score
-                ));
-            }
-
-            let response = response_parts.join(" | ");
-            output_response(cli, "combined", &response, "🎯", "Combined Detection")?;
-        }
-        Commands::Breathing => {
-            let result = radar.measure_breathing().await?;
-            let response = format!(
-                "State: {}, Rate: {:.1} BPM, Ready: {}, Temperature: {}°C",
-                result.app_state.display_name(),
-                result.breathing_rate,
-                if result.result_ready { "YES" } else { "NO" },
-                result.temperature
-            );
-            output_response(cli, "breathing", &response, "🫁", "Breathing Detection")?;
-        }
-        Commands::Config {
-            start,
-            length,
-            presence_range,
-            sensitivity,
-            frame_rate,
-        } => {
-            configure_detector(
-                radar,
-                start,
-                length,
-                presence_range,
-                sensitivity,
-                frame_rate,
-            );
-            output_response(
-                cli,
-                "config",
-                "Configuration updated successfully",
-                "⚙️",
-                "Configuration",
-            )?;
-        }
         Commands::Firmware { action } => {
-            handle_firmware_command(action, cli).await?;
+            handle_firmware_action(radar, action, &cli.firmware_path).await?;
         }
-        Commands::Bootloader { reset } => {
-            handle_bootloader_command(reset, cli)?;
-        }
+
         Commands::Gpio { .. } => {
-            // GPIO command is handled early in run() function to avoid I2C initialization
-            // This case should never be reached, but is required for exhaustive pattern matching
-            unreachable!("GPIO command should be handled early in run() function")
-        }
-    }
-
-    // Note: Register debugging is now handled within individual commands
-    // to show registers after configuration is applied
-
-    Ok(())
-}
-
-#[allow(clippy::too_many_lines)] // Complex monitoring function with multiple output formats
-async fn monitor_measurements(
-    radar: &mut radar::XM125Radar,
-    cli: &Cli,
-    interval: u64,
-    count: Option<u32>,
-) -> Result<(), RadarError> {
-    use tokio::time::{sleep, Duration};
-
-    let mut measurement_count = 0;
-
-    loop {
-        // Choose measurement type based on detector mode
-        match cli.mode {
-            cli::DetectorMode::Distance => {
-                let result = radar.measure_distance().await?;
-                match cli.format {
-                    cli::OutputFormat::Human => {
-                        println!(
-                            "[{}] Distance: {:.2}m | Strength: {:.1}dB | Temp: {}°C",
-                            chrono::Utc::now().format("%H:%M:%S"),
-                            result.distance,
-                            result.strength,
-                            result.temperature
-                        );
-                    }
-                    cli::OutputFormat::Json => {
-                        let json_response = serde_json::json!({
-                            "timestamp": chrono::Utc::now().to_rfc3339(),
-                            "distance_m": result.distance,
-                            "strength_db": result.strength,
-                            "temperature_c": result.temperature,
-                            "measurement_count": measurement_count
-                        });
-                        println!("{}", serde_json::to_string(&json_response)?);
-                    }
-                    cli::OutputFormat::Csv => {
-                        if measurement_count == 0 {
-                            println!(
-                                "timestamp,distance_m,strength_db,temperature_c,measurement_count"
-                            );
-                        }
-                        println!(
-                            "{},{},{},{},{}",
-                            chrono::Utc::now().to_rfc3339(),
-                            result.distance,
-                            result.strength,
-                            result.temperature,
-                            measurement_count
-                        );
-                    }
-                }
-            }
-            cli::DetectorMode::Presence => {
-                let result = radar.measure_presence().await?;
-                match cli.format {
-                    cli::OutputFormat::Human => {
-                        println!(
-                            "[{}] Presence: {} | Distance: {:.2}m | Intra: {:.2} | Inter: {:.2}",
-                            chrono::Utc::now().format("%H:%M:%S"),
-                            if result.presence_detected {
-                                "DETECTED"
-                            } else {
-                                "NOT DETECTED"
-                            },
-                            result.presence_distance,
-                            result.intra_presence_score,
-                            result.inter_presence_score
-                        );
-                    }
-                    cli::OutputFormat::Json => {
-                        let json_response = serde_json::json!({
-                            "timestamp": chrono::Utc::now().to_rfc3339(),
-                            "presence_detected": result.presence_detected,
-                            "presence_distance_m": result.presence_distance,
-                            "intra_presence_score": result.intra_presence_score,
-                            "inter_presence_score": result.inter_presence_score,
-                            "measurement_count": measurement_count
-                        });
-                        println!("{}", serde_json::to_string(&json_response)?);
-                    }
-                    cli::OutputFormat::Csv => {
-                        if measurement_count == 0 {
-                            println!("timestamp,presence_detected,presence_distance_m,intra_score,inter_score,measurement_count");
-                        }
-                        println!(
-                            "{},{},{:.2},{:.2},{:.2},{}",
-                            chrono::Utc::now().to_rfc3339(),
-                            if result.presence_detected { "1" } else { "0" },
-                            result.presence_distance,
-                            result.intra_presence_score,
-                            result.inter_presence_score,
-                            measurement_count
-                        );
-                    }
-                }
-            }
-            cli::DetectorMode::Combined => {
-                let result = radar.measure_combined().await?;
-                match cli.format {
-                    cli::OutputFormat::Human => {
-                        let mut parts = Vec::new();
-                        if let Some(distance) = &result.distance {
-                            parts.push(format!(
-                                "Distance: {:.2}m ({:.1}dB)",
-                                distance.distance, distance.strength
-                            ));
-                        }
-                        if let Some(presence) = &result.presence {
-                            parts.push(format!(
-                                "Presence: {} at {:.2}m (intra: {:.2}, inter: {:.2})",
-                                if presence.presence_detected {
-                                    "DETECTED"
-                                } else {
-                                    "NOT DETECTED"
-                                },
-                                presence.presence_distance,
-                                presence.intra_presence_score,
-                                presence.inter_presence_score
-                            ));
-                        }
-                        println!(
-                            "[{}] {}",
-                            chrono::Utc::now().format("%H:%M:%S"),
-                            parts.join(" | ")
-                        );
-                    }
-                    cli::OutputFormat::Json => {
-                        println!("{}", serde_json::to_string(&result)?);
-                    }
-                    cli::OutputFormat::Csv => {
-                        if measurement_count == 0 {
-                            println!("timestamp,distance_m,strength_db,presence_detected,presence_distance_m,intra_score,inter_score,temperature_c,measurement_count");
-                        }
-                        let distance_str = if let Some(d) = &result.distance {
-                            format!("{:.2},{:.1},{}", d.distance, d.strength, d.temperature)
-                        } else {
-                            ",,".to_string()
-                        };
-                        let presence_str = if let Some(p) = &result.presence {
-                            format!(
-                                "{},{:.2},{:.2},{:.2}",
-                                if p.presence_detected { "1" } else { "0" },
-                                p.presence_distance,
-                                p.intra_presence_score,
-                                p.inter_presence_score
-                            )
-                        } else {
-                            ",,,".to_string()
-                        };
-                        println!(
-                            "{},{},{},{}",
-                            chrono::Utc::now().to_rfc3339(),
-                            distance_str,
-                            presence_str,
-                            measurement_count
-                        );
-                    }
-                }
-            }
-            cli::DetectorMode::Breathing => {
-                let result = radar.measure_breathing().await?;
-                match cli.format {
-                    cli::OutputFormat::Human => {
-                        println!(
-                            "[{}] State: {} | Rate: {:.1} BPM | Ready: {} | Temp: {}°C",
-                            chrono::Utc::now().format("%H:%M:%S"),
-                            result.app_state.display_name(),
-                            result.breathing_rate,
-                            if result.result_ready { "YES" } else { "NO" },
-                            result.temperature
-                        );
-                    }
-                    cli::OutputFormat::Json => {
-                        let json_response = serde_json::json!({
-                            "timestamp": chrono::Utc::now().to_rfc3339(),
-                            "app_state": result.app_state.display_name(),
-                            "breathing_rate_bpm": result.breathing_rate,
-                            "result_ready": result.result_ready,
-                            "temperature_c": result.temperature,
-                            "measurement_count": measurement_count
-                        });
-                        println!("{}", serde_json::to_string(&json_response)?);
-                    }
-                    cli::OutputFormat::Csv => {
-                        if measurement_count == 0 {
-                            println!("timestamp,app_state,breathing_rate_bpm,result_ready,temperature_c,measurement_count");
-                        }
-                        println!(
-                            "{},{},{:.1},{},{},{}",
-                            chrono::Utc::now().to_rfc3339(),
-                            result.app_state.display_name(),
-                            result.breathing_rate,
-                            if result.result_ready { "1" } else { "0" },
-                            result.temperature,
-                            measurement_count
-                        );
-                    }
-                }
-            }
-        }
-
-        measurement_count += 1;
-
-        if let Some(max_count) = count {
-            if measurement_count >= max_count {
-                break;
-            }
-        }
-
-        sleep(Duration::from_millis(interval)).await;
-    }
-
-    Ok(())
-}
-
-fn output_response(
-    cli: &Cli,
-    command: &str,
-    response: &str,
-    emoji: &str,
-    title: &str,
-) -> Result<(), RadarError> {
-    if cli.quiet {
-        return Ok(());
-    }
-
-    match cli.format {
-        cli::OutputFormat::Human => {
-            println!("{emoji} {title}:");
-            println!("{response}");
-        }
-        cli::OutputFormat::Json => {
-            let json_response = serde_json::json!({
-                "timestamp": chrono::Utc::now().to_rfc3339(),
-                "command": command,
-                "status": "success",
-                "data": response
-            });
-            println!("{}", serde_json::to_string_pretty(&json_response)?);
-        }
-        cli::OutputFormat::Csv => {
-            println!("timestamp,command,status,response");
-            println!(
-                "{},{},success,\"{}\"",
-                chrono::Utc::now().to_rfc3339(),
-                command,
-                response.replace('"', "\"\"")
-            );
+            // GPIO commands are handled earlier, this should not be reached
+            unreachable!("GPIO commands should be handled before I2C initialization");
         }
     }
 
     Ok(())
 }
 
-/// Monitor presence detection continuously
-#[allow(clippy::too_many_lines)] // Complex monitoring function with multiple output formats
-async fn monitor_presence_continuous(
-    radar: &mut radar::XM125Radar,
-    cli: &Cli,
-    count: Option<u32>,
-    interval: u64,
-    save_to: Option<&str>,
-) -> Result<(), RadarError> {
-    use tokio::time::{sleep, Duration};
-
-    // Debug registers if requested (after configuration is applied)
-    if cli.debug_registers {
-        info!(
-            "🔍 Debug registers requested for continuous monitoring, radar connected: {}",
-            radar.is_connected()
-        );
-        if radar.is_connected() {
-            match radar.debug_registers("Presence") {
-                Ok(()) => info!("✅ Register debugging completed successfully"),
-                Err(e) => {
-                    eprintln!("❌ Failed to debug registers: {e}");
-                    warn!("Failed to debug registers: {e}");
-                }
-            }
-        } else {
-            eprintln!("❌ Cannot debug registers: radar not connected");
-        }
+/// Configure distance measurement range
+fn configure_distance_range(radar: &mut XM125Radar, range_str: &str) -> Result<(), RadarError> {
+    let parts: Vec<&str> = range_str.split(':').collect();
+    if parts.len() != 2 {
+        return Err(RadarError::DeviceError {
+            message: format!(
+                "Invalid range format '{range_str}'. Use 'start:end' (e.g., '0.1:3.0')"
+            ),
+        });
     }
 
-    let mut csv_writer = if let Some(filename) = save_to {
-        let file = std::fs::File::create(filename).map_err(|e| RadarError::DeviceError {
-            message: format!("Failed to create CSV file '{filename}': {e}"),
-        })?;
-        let mut writer = csv::Writer::from_writer(file);
+    let start: f32 = parts[0].parse().map_err(|_| RadarError::DeviceError {
+        message: format!("Invalid start range: {}", parts[0]),
+    })?;
 
-        // Write CSV header
-        writer
-            .write_record([
-                "timestamp",
-                "presence_detected",
-                "presence_distance_m",
-                "intra_score",
-                "inter_score",
-            ])
-            .map_err(|e| RadarError::DeviceError {
-                message: format!("Failed to write CSV header: {e}"),
-            })?;
+    let end: f32 = parts[1].parse().map_err(|_| RadarError::DeviceError {
+        message: format!("Invalid end range: {}", parts[1]),
+    })?;
 
-        Some(writer)
-    } else {
-        None
-    };
-
-    let total_count = count.unwrap_or(0);
-    let infinite = total_count == 0;
-
-    if !cli.quiet {
-        if infinite {
-            println!("🔄 Starting continuous presence monitoring (Ctrl+C to stop)");
-        } else {
-            println!("🔄 Starting presence monitoring ({total_count} measurements)");
-        }
-        println!("📊 Interval: {interval}ms");
-        if save_to.is_some() {
-            println!("💾 Saving to: {}", save_to.unwrap());
-        }
-        println!("────────────────────────────────────────────────────────────");
+    if start >= end {
+        return Err(RadarError::DeviceError {
+            message: format!("Start range ({start}) must be less than end range ({end})"),
+        });
     }
 
-    let mut measurement_count = 0u32;
-
-    loop {
-        let start_time = std::time::Instant::now();
-
-        match radar.measure_presence().await {
-            Ok(result) => {
-                measurement_count += 1;
-                let timestamp = chrono::Utc::now();
-                let timestamp_full = timestamp.format("%Y-%m-%d %H:%M:%S%.3f UTC").to_string();
-                let timestamp_short = timestamp.format("%H:%M:%S%.3f").to_string();
-
-                // Display result
-                if !cli.quiet {
-                    let status = if result.presence_detected {
-                        "DETECTED"
-                    } else {
-                        "NOT DETECTED"
-                    };
-                    println!(
-                        "[{}] #{:3} Presence: {}, Distance: {:.2}m, Intra: {:.2}, Inter: {:.2}",
-                        timestamp_short,
-                        measurement_count,
-                        status,
-                        result.presence_distance,
-                        result.intra_presence_score,
-                        result.inter_presence_score
-                    );
-                }
-
-                // Save to CSV if requested
-                if let Some(ref mut writer) = csv_writer {
-                    writer
-                        .write_record([
-                            timestamp_full.as_str(),
-                            &result.presence_detected.to_string(),
-                            &result.presence_distance.to_string(),
-                            &result.intra_presence_score.to_string(),
-                            &result.inter_presence_score.to_string(),
-                        ])
-                        .map_err(|e| RadarError::DeviceError {
-                            message: format!("Failed to write CSV record: {e}"),
-                        })?;
-                    writer.flush().map_err(|e| RadarError::DeviceError {
-                        message: format!("Failed to flush CSV writer: {e}"),
-                    })?;
-                }
-
-                // Check if we've reached the target count
-                if !infinite && measurement_count >= total_count {
-                    break;
-                }
-            }
-            Err(e) => {
-                eprintln!("❌ Measurement #{} failed: {}", measurement_count + 1, e);
-                if !infinite && measurement_count >= total_count {
-                    break;
-                }
-            }
-        }
-
-        // Wait for the specified interval
-        let elapsed = start_time.elapsed();
-        let target_duration = Duration::from_millis(interval);
-        if elapsed < target_duration {
-            sleep(target_duration - elapsed).await;
-        }
+    if start < 0.1 || end > 3.0 {
+        return Err(RadarError::DeviceError {
+            message: "Distance range must be between 0.1m and 3.0m".to_string(),
+        });
     }
 
-    if !cli.quiet {
-        println!("────────────────────────────────────────────────────────────");
-        println!("✅ Completed {measurement_count} presence measurements");
-        if let Some(filename) = save_to {
-            println!("💾 Results saved to: {filename}");
-        }
-    }
+    info!("🎯 Configuring distance range: {start:.2}m - {end:.2}m");
+    radar.config.start_m = start;
+    radar.config.length_m = end - start;
 
     Ok(())
 }
@@ -982,15 +279,13 @@ fn configure_presence_parameters(
             });
         }
 
-        if !(0.06..=7.0).contains(&min) || !(0.06..=7.0).contains(&max) {
+        if min < 0.06 || max > 7.0 {
             return Err(RadarError::DeviceError {
-                message: format!(
-                    "Range must be between 0.06m and 7.0m (got {min:.2}m - {max:.2}m)"
-                ),
+                message: "Presence range must be between 0.06m and 7.0m".to_string(),
             });
         }
 
-        // Update radar configuration with custom range
+        // Set custom range (this will be used by configure_presence_range)
         radar.config.start_m = min;
         radar.config.length_m = max - min;
         config_changed = true;
@@ -1006,7 +301,7 @@ fn configure_presence_parameters(
             });
         }
 
-        radar.config.threshold_sensitivity = sens;
+        // Convert sensitivity to internal threshold values
         radar.config.intra_detection_threshold = sens * 1000.0; // Convert to internal units
         radar.config.inter_detection_threshold = sens * 800.0; // Slightly lower for inter
         config_changed = true;
@@ -1040,825 +335,502 @@ fn configure_presence_parameters(
     Ok(())
 }
 
-/// Configure radar based on CLI options
-async fn configure_radar_from_cli(
+/// Debug registers if radar is connected, with automatic connection attempt
+fn debug_registers_if_connected(radar: &mut XM125Radar, mode: &str) {
+    info!(
+        "🔍 Debug registers requested, radar connected: {}",
+        radar.is_connected()
+    );
+
+    // Ensure radar is connected before debugging
+    if !radar.is_connected() {
+        info!("🔄 Radar not connected, attempting to connect for register debugging...");
+        if let Err(e) = radar.connect() {
+            eprintln!("❌ Failed to connect radar for register debugging: {e}");
+            return;
+        }
+    }
+
+    if radar.is_connected() {
+        match radar.debug_registers(mode) {
+            Ok(()) => info!("✅ Register debugging completed successfully"),
+            Err(e) => {
+                eprintln!("❌ Failed to debug registers: {e}");
+                warn!("Failed to debug registers: {e}");
+            }
+        }
+    } else {
+        eprintln!("❌ Cannot debug registers: radar not connected after connection attempt");
+    }
+}
+
+/// Display distance measurement result
+fn display_distance_result(result: &radar::DistanceMeasurement, format: &cli::OutputFormat) {
+    match format {
+        cli::OutputFormat::Json => {
+            println!("{}", serde_json::to_string_pretty(result).unwrap());
+        }
+        cli::OutputFormat::Csv => {
+            println!("distance_m,signal_strength,temperature_c");
+            println!(
+                "{:.3},{:.2},{}",
+                result.distance, result.strength, result.temperature
+            );
+        }
+        cli::OutputFormat::Human => {
+            println!("📏 Distance Measurement:");
+            println!("  Distance: {:.3}m", result.distance);
+            println!("  Signal Strength: {:.2}", result.strength);
+            println!("  Temperature: {:.1}°C", result.temperature);
+        }
+    }
+}
+
+/// Display presence detection result
+fn display_presence_result(result: &radar::PresenceMeasurement, format: &cli::OutputFormat) {
+    match format {
+        cli::OutputFormat::Json => {
+            println!("{}", serde_json::to_string_pretty(result).unwrap());
+        }
+        cli::OutputFormat::Csv => {
+            println!("presence_detected,presence_distance_m,intra_score,inter_score");
+            println!(
+                "{},{:.2},{:.2},{:.2}",
+                result.presence_detected,
+                result.presence_distance,
+                result.intra_presence_score,
+                result.inter_presence_score
+            );
+        }
+        cli::OutputFormat::Human => {
+            println!("👁️ Presence Detection:");
+            let status = if result.presence_detected {
+                "DETECTED"
+            } else {
+                "NOT DETECTED"
+            };
+            println!(
+                "Presence: {}, Distance: {:.2}m, Intra: {:.2}, Inter: {:.2}",
+                status,
+                result.presence_distance,
+                result.intra_presence_score,
+                result.inter_presence_score
+            );
+        }
+    }
+}
+
+/// Monitor distance measurements continuously
+async fn monitor_distance_continuous(
     radar: &mut radar::XM125Radar,
     cli: &Cli,
+    count: Option<u32>,
+    interval: u64,
+    save_to: Option<&str>,
 ) -> Result<(), RadarError> {
-    // Convert CLI detector mode to radar detector mode
-    let detector_mode = match cli.mode {
-        cli::DetectorMode::Distance => radar::DetectorMode::Distance,
-        cli::DetectorMode::Presence => radar::DetectorMode::Presence,
-        cli::DetectorMode::Combined => radar::DetectorMode::Combined,
-        cli::DetectorMode::Breathing => radar::DetectorMode::Breathing,
+    use tokio::time::{sleep, Duration};
+
+    let mut csv_writer = if let Some(filename) = save_to {
+        let file = std::fs::File::create(filename).map_err(|e| RadarError::DeviceError {
+            message: format!("Failed to create CSV file '{filename}': {e}"),
+        })?;
+        let mut writer = csv::Writer::from_writer(file);
+
+        // Write CSV header
+        writer
+            .write_record([
+                "timestamp",
+                "distance_m",
+                "signal_strength",
+                "temperature_c",
+            ])
+            .map_err(|e| RadarError::DeviceError {
+                message: format!("Failed to write CSV header: {e}"),
+            })?;
+
+        Some(writer)
+    } else {
+        None
     };
 
-    radar.set_detector_mode(detector_mode).await?;
+    let infinite = count.is_none();
+    let total_count = count.unwrap_or(u32::MAX);
 
-    // Configure auto-reconnect (default true, unless --no-auto-reconnect is specified)
-    let auto_reconnect = cli.auto_reconnect && !cli.no_auto_reconnect;
-    let config = radar::XM125Config {
-        detector_mode,
-        auto_reconnect,
-        ..Default::default()
-    };
+    if !cli.quiet {
+        if infinite {
+            println!("🔄 Starting continuous distance monitoring (Ctrl+C to stop)");
+        } else {
+            println!("🔄 Starting distance monitoring ({total_count} measurements)");
+        }
+        println!("📊 Interval: {interval}ms");
+        if save_to.is_some() {
+            println!("💾 Saving to: {}", save_to.unwrap());
+        }
+        println!("────────────────────────────────────────────────────────────");
+    }
 
-    radar.set_config(config);
+    let mut measurement_count = 0;
+
+    while measurement_count < total_count {
+        let start_time = std::time::Instant::now();
+
+        match radar.measure_distance().await {
+            Ok(result) => {
+                measurement_count += 1;
+
+                // Display result
+                if !cli.quiet {
+                    let timestamp = Utc::now().format("%H:%M:%S%.3f").to_string();
+                    println!(
+                        "[{timestamp}] #{measurement_count:3} Distance: {:.3}m, Signal: {:.2}, Temp: {:.1}°C",
+                        result.distance, result.strength, result.temperature
+                    );
+                }
+
+                // Save to CSV if requested
+                if let Some(ref mut writer) = csv_writer {
+                    let timestamp_full = Utc::now().format("%Y-%m-%d %H:%M:%S%.3f").to_string();
+                    writer
+                        .write_record([
+                            timestamp_full.as_str(),
+                            &result.distance.to_string(),
+                            &result.strength.to_string(),
+                            &result.temperature.to_string(),
+                        ])
+                        .map_err(|e| RadarError::DeviceError {
+                            message: format!("Failed to write CSV record: {e}"),
+                        })?;
+                    writer.flush().map_err(|e| RadarError::DeviceError {
+                        message: format!("Failed to flush CSV writer: {e}"),
+                    })?;
+                }
+
+                // Check if we've reached the target count
+                if !infinite && measurement_count >= total_count {
+                    break;
+                }
+            }
+            Err(e) => {
+                eprintln!("❌ Measurement #{} failed: {}", measurement_count + 1, e);
+                // Continue with next measurement
+            }
+        }
+
+        // Wait for the specified interval
+        let elapsed = start_time.elapsed();
+        let target_duration = Duration::from_millis(interval);
+        if elapsed < target_duration {
+            sleep(target_duration - elapsed).await;
+        }
+    }
+
+    if !cli.quiet {
+        println!("────────────────────────────────────────────────────────────");
+        println!("✅ Completed {measurement_count} distance measurements");
+        if let Some(filename) = save_to {
+            println!("💾 Results saved to: {filename}");
+        }
+    }
+
     Ok(())
 }
 
-/// Configure detector with new settings
-fn configure_detector(
+/// Monitor presence detection continuously
+async fn monitor_presence_continuous(
     radar: &mut radar::XM125Radar,
-    start: Option<f32>,
-    length: Option<f32>,
-    presence_range: Option<cli::PresenceRange>,
-    sensitivity: Option<f32>,
-    frame_rate: Option<f32>,
-) {
-    let mut config = radar::XM125Config::default();
+    cli: &Cli,
+    count: Option<u32>,
+    interval: u64,
+    save_to: Option<&str>,
+) -> Result<(), RadarError> {
+    use tokio::time::{sleep, Duration};
 
-    if let Some(start) = start {
-        config.start_m = start;
+    let mut csv_writer = if let Some(filename) = save_to {
+        let file = std::fs::File::create(filename).map_err(|e| RadarError::DeviceError {
+            message: format!("Failed to create CSV file '{filename}': {e}"),
+        })?;
+        let mut writer = csv::Writer::from_writer(file);
+
+        // Write CSV header
+        writer
+            .write_record([
+                "timestamp",
+                "presence_detected",
+                "presence_distance_m",
+                "intra_score",
+                "inter_score",
+            ])
+            .map_err(|e| RadarError::DeviceError {
+                message: format!("Failed to write CSV header: {e}"),
+            })?;
+
+        Some(writer)
+    } else {
+        None
+    };
+
+    let infinite = count.is_none();
+    let total_count = count.unwrap_or(u32::MAX);
+
+    if !cli.quiet {
+        if infinite {
+            println!("🔄 Starting continuous presence monitoring (Ctrl+C to stop)");
+        } else {
+            println!("🔄 Starting presence monitoring ({total_count} measurements)");
+        }
+        println!("📊 Interval: {interval}ms");
+        if save_to.is_some() {
+            println!("💾 Saving to: {}", save_to.unwrap());
+        }
+        println!("────────────────────────────────────────────────────────────");
     }
 
-    if let Some(length) = length {
-        config.length_m = length;
+    let mut measurement_count = 0;
+
+    while measurement_count < total_count {
+        let start_time = std::time::Instant::now();
+
+        match radar.measure_presence().await {
+            Ok(result) => {
+                measurement_count += 1;
+
+                // Display result
+                if !cli.quiet {
+                    let timestamp = Utc::now().format("%H:%M:%S%.3f").to_string();
+                    let status = if result.presence_detected {
+                        "DETECTED"
+                    } else {
+                        "NOT DETECTED"
+                    };
+                    println!(
+                        "[{timestamp}] #{measurement_count:3} Presence: {status}, Distance: {:.2}m, Intra: {:.2}, Inter: {:.2}",
+                        result.presence_distance, result.intra_presence_score, result.inter_presence_score
+                    );
+                }
+
+                // Save to CSV if requested
+                if let Some(ref mut writer) = csv_writer {
+                    let timestamp_full = Utc::now().format("%Y-%m-%d %H:%M:%S%.3f").to_string();
+                    writer
+                        .write_record([
+                            timestamp_full.as_str(),
+                            &result.presence_detected.to_string(),
+                            &result.presence_distance.to_string(),
+                            &result.intra_presence_score.to_string(),
+                            &result.inter_presence_score.to_string(),
+                        ])
+                        .map_err(|e| RadarError::DeviceError {
+                            message: format!("Failed to write CSV record: {e}"),
+                        })?;
+                    writer.flush().map_err(|e| RadarError::DeviceError {
+                        message: format!("Failed to flush CSV writer: {e}"),
+                    })?;
+                }
+
+                // Check if we've reached the target count
+                if !infinite && measurement_count >= total_count {
+                    break;
+                }
+            }
+            Err(e) => {
+                eprintln!("❌ Measurement #{} failed: {}", measurement_count + 1, e);
+                // Continue with next measurement
+            }
+        }
+
+        // Wait for the specified interval
+        let elapsed = start_time.elapsed();
+        let target_duration = Duration::from_millis(interval);
+        if elapsed < target_duration {
+            sleep(target_duration - elapsed).await;
+        }
     }
 
-    if let Some(range) = presence_range {
-        config.presence_range = match range {
-            cli::PresenceRange::Short => radar::PresenceRange::Short,
-            cli::PresenceRange::Medium => radar::PresenceRange::Medium,
-            cli::PresenceRange::Long => radar::PresenceRange::Long,
-        };
+    if !cli.quiet {
+        println!("────────────────────────────────────────────────────────────");
+        println!("✅ Completed {measurement_count} presence measurements");
+        if let Some(filename) = save_to {
+            println!("💾 Results saved to: {filename}");
+        }
     }
 
-    if let Some(sensitivity) = sensitivity {
-        config.threshold_sensitivity = sensitivity;
-    }
-
-    if let Some(rate) = frame_rate {
-        config.frame_rate = rate;
-    }
-
-    radar.set_config(config);
+    Ok(())
 }
 
-/// Handle firmware management commands
-#[allow(clippy::too_many_lines)] // Complex firmware management requires detailed handling
-async fn handle_firmware_command(action: FirmwareAction, cli: &Cli) -> Result<(), RadarError> {
-    let firmware_manager =
-        FirmwareManager::new(&cli.firmware_path, &cli.control_script, cli.i2c_address);
-
+/// Handle firmware-related commands
+async fn handle_firmware_action(
+    radar: &mut XM125Radar,
+    action: &FirmwareAction,
+    firmware_path: &str,
+) -> Result<(), RadarError> {
     match action {
         FirmwareAction::Check => {
-            // Use the device manager for basic device presence check
-            let device_manager = DeviceManager::new(
-                cli.get_i2c_device_path(),
-                cli.i2c_address,
-                cli.firmware_path.clone(),
-                cli.control_script.clone(),
-            );
-
-            let state = device_manager.check_device_presence().await;
-
-            if !state.is_present {
-                let error_msg = "XM125 device not found on I2C bus. Use 'sudo /usr/bin/xm125-control.sh --reset-run' to reset device.";
-                output_response(cli, "device_not_found", error_msg, "❌", "Device Not Found")?;
-                return Ok(());
-            }
-
-            // Device is present - now read firmware info directly using firmware manager
-            let firmware_manager =
-                FirmwareManager::new(&cli.firmware_path, &cli.control_script, cli.i2c_address);
-
-            // Try to read current firmware info
-            match get_current_firmware_info_for_check(cli) {
-                Ok((app_id, firmware_type)) => {
-                    let response = format!(
-                        "Current firmware: {} (App ID: {})",
-                        firmware_type.display_name(),
-                        app_id
-                    );
-                    output_response(cli, "firmware_check", &response, "✅", "Firmware Check")?;
-
-                    // Try to get checksum
-                    match firmware_manager.get_firmware_checksum(firmware_type) {
-                        Ok(checksum) => {
-                            let checksum_info = format!("Firmware checksum: {checksum}");
-                            output_response(
-                                cli,
-                                "firmware_checksum",
-                                &checksum_info,
-                                "🔐",
-                                "Checksum",
-                            )?;
-                        }
-                        Err(e) => {
-                            debug!("Could not read firmware checksum: {e}");
-                            // Don't show this as an error to users - checksums are optional
-                        }
-                    }
-                }
-                Err(e) => {
-                    let warning_msg =
-                        format!("XM125 device present but could not read firmware info: {e}");
-                    output_response(
-                        cli,
-                        "device_unresponsive",
-                        &warning_msg,
-                        "⚠️",
-                        "Device Communication Error",
-                    )?;
-                }
-            }
+            let info = radar.get_info()?;
+            println!("📦 Current Firmware:");
+            println!("{info}");
         }
-
         FirmwareAction::Update {
             firmware_type,
-            force,
-            verify,
+            force: _,
+            verify: _,
         } => {
-            let target_firmware = firmware::FirmwareType::from(firmware_type);
-
-            // Use the new device manager for clean firmware updating
-            let device_manager = DeviceManager::new(
-                cli.get_i2c_device_path(),
-                cli.i2c_address,
-                cli.firmware_path.clone(),
-                cli.control_script.clone(),
-            );
-
-            // Check current state first
-            let state = device_manager.check_device_presence().await;
-
-            if !state.is_present {
-                let error_msg = "XM125 device not found on I2C bus. Use 'sudo /usr/bin/xm125-control.sh --reset-run' to reset device.";
-                output_response(cli, "device_not_found", error_msg, "❌", "Device Not Found")?;
-                return Ok(());
-            }
-
-            // Check if update is needed (unless forced)
-            if !force {
-                if let Some(current_type) = state.firmware_type {
-                    if current_type == target_firmware {
-                        let msg = format!(
-                            "✅ Firmware already matches {} - no update needed",
-                            target_firmware.display_name()
-                        );
-                        output_response(cli, "firmware_update", &msg, "✅", "Firmware Update")?;
-                        return Ok(());
-                    }
-                }
-            }
-
-            // Perform the firmware update
-            info!(
-                "🚀 Updating firmware to {} (forced: {}, verify: {})",
-                target_firmware.display_name(),
-                force,
-                verify
-            );
-
-            match device_manager
-                .update_firmware(target_firmware, verify)
-                .await
-            {
-                Ok(()) => {
-                    let success_msg = format!(
-                        "✅ Successfully updated firmware to {}",
-                        target_firmware.display_name()
-                    );
-                    output_response(
-                        cli,
-                        "firmware_update",
-                        &success_msg,
-                        "🚀",
-                        "Firmware Update",
-                    )?;
-                }
-                Err(e) => {
-                    let error_msg = format!("❌ Firmware update failed: {e}");
-                    output_response(cli, "firmware_error", &error_msg, "❌", "Firmware Error")?;
-                    return Err(e);
-                }
-            }
+            let manager =
+                firmware::FirmwareManager::new(firmware_path, "/usr/bin/xm125-control.sh", 0x52);
+            manager.update_firmware(*firmware_type).await?;
         }
-
         FirmwareAction::Verify { firmware_type } => {
-            #[allow(clippy::single_match_else)]
-            // Complex verification logic requires match structure
-            match firmware_type {
-                Some(fw_type) => {
-                    let target_firmware = firmware::FirmwareType::from(fw_type);
-
-                    // Compare device checksum with binary checksum
-                    match firmware_manager.get_firmware_checksum(target_firmware) {
-                        Ok(device_checksum) => {
-                            match firmware_manager.calculate_binary_checksum(target_firmware) {
-                                Ok(binary_checksum) => {
-                                    if device_checksum == binary_checksum {
-                                        let msg = format!("✅ Firmware verification PASSED for {}\nDevice: {}\nBinary: {}", 
-                                                         target_firmware.display_name(), device_checksum, binary_checksum);
-                                        output_response(
-                                            cli,
-                                            "firmware_verify",
-                                            &msg,
-                                            "✅",
-                                            "Verification",
-                                        )?;
-                                    } else {
-                                        let msg = format!("❌ Firmware verification FAILED for {}\nDevice: {}\nBinary: {}", 
-                                                         target_firmware.display_name(), device_checksum, binary_checksum);
-                                        output_response(
-                                            cli,
-                                            "firmware_verify",
-                                            &msg,
-                                            "❌",
-                                            "Verification",
-                                        )?;
-                                    }
-                                }
-                                Err(e) => {
-                                    let msg = format!("Could not calculate binary checksum: {e}");
-                                    output_response(
-                                        cli,
-                                        "firmware_verify",
-                                        &msg,
-                                        "❌",
-                                        "Verification Error",
-                                    )?;
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            let msg = format!("Could not read device checksum: {e}");
-                            output_response(
-                                cli,
-                                "firmware_verify",
-                                &msg,
-                                "❌",
-                                "Verification Error",
-                            )?;
-                        }
-                    }
-                }
-                None => {
-                    // Verify all available firmware types
-                    let firmware_types = [
-                        firmware::FirmwareType::Distance,
-                        firmware::FirmwareType::Presence,
-                        firmware::FirmwareType::Breathing,
-                    ];
-
-                    for fw_type in &firmware_types {
-                        match firmware_manager.calculate_binary_checksum(*fw_type) {
-                            Ok(checksum) => {
-                                let msg = format!("{}: {}", fw_type.display_name(), checksum);
-                                output_response(
-                                    cli,
-                                    "firmware_checksums",
-                                    &msg,
-                                    "🔐",
-                                    "Binary Checksums",
-                                )?;
-                            }
-                            Err(e) => {
-                                warn!(
-                                    "Could not calculate checksum for {}: {}",
-                                    fw_type.display_name(),
-                                    e
-                                );
-                            }
-                        }
-                    }
-                }
+            info!("Firmware verification not yet implemented in v2.0.0");
+            if let Some(fw_type) = firmware_type {
+                info!("Would verify firmware type: {fw_type:?}");
+            } else {
+                info!("Would verify current firmware");
             }
         }
-
-        FirmwareAction::Checksum { .. } => {
-            // Checksum command is handled early in run() function to avoid I2C initialization
-            // This case should never be reached, but is required for exhaustive pattern matching
-            unreachable!("Checksum command should be handled early in run() function")
-        }
-
-        FirmwareAction::Erase { .. } => {
-            // Erase command is handled early in run() function to avoid I2C initialization
-            // This case should never be reached, but is required for exhaustive pattern matching
-            unreachable!("Erase command should be handled early in run() function")
+        FirmwareAction::Erase { .. }
+        | FirmwareAction::Checksum { .. }
+        | FirmwareAction::Bootloader { .. } => {
+            // These are handled earlier in run() before I2C initialization
+            unreachable!("These firmware commands should be handled before I2C initialization");
         }
     }
-
     Ok(())
 }
 
-/// Get current firmware application ID
-fn get_current_firmware_info(radar: &mut radar::XM125Radar) -> Result<u32, RadarError> {
-    // Try to connect and read application ID
-    match radar.connect() {
-        Ok(()) => {
-            // Read the application ID register directly
-            let app_id_data = radar.read_application_id()?;
-            Ok(app_id_data)
-        }
-        Err(e) => {
-            warn!("Could not connect to read firmware info: {e}");
-            Err(e)
-        }
-    }
-}
-
-/// Check if device is present in either run mode (0x52) or bootloader mode (0x48)
-fn check_device_presence(cli: &Cli) -> Result<DeviceMode, RadarError> {
-    let i2c_bus = cli.i2c_bus;
-    let run_mode_address = cli.i2c_address;
-
-    // Check if i2cdetect is available
-    if std::process::Command::new("i2cdetect")
-        .arg("--help")
-        .output()
-        .map(|output| !output.status.success())
-        .unwrap_or(true)
-    {
+/// Handle firmware erase command
+async fn handle_firmware_erase_command(confirm: bool) -> Result<(), RadarError> {
+    if !confirm {
+        eprintln!("❌ Chip erase requires --confirm flag for safety");
+        eprintln!("   This will completely erase all firmware from the XM125 module.");
+        eprintln!("   Use: xm125-radar-monitor firmware erase --confirm");
         return Err(RadarError::DeviceError {
-            message: "i2cdetect utility not available for device detection".to_string(),
+            message: "Erase operation not confirmed".to_string(),
         });
     }
 
-    // Check run mode (0x52) first
-    let run_mode_detected = std::process::Command::new("i2cdetect")
-        .args([
-            "-y",
-            &i2c_bus.to_string(),
-            &format!("0x{run_mode_address:02x}"),
-            &format!("0x{run_mode_address:02x}"),
-        ])
-        .output()
-        .map(|output| {
-            output.status.success()
-                && String::from_utf8_lossy(&output.stdout)
-                    .contains(&format!("{run_mode_address:02x}"))
-        })
-        .unwrap_or(false);
-
-    if run_mode_detected {
-        return Ok(DeviceMode::RunMode);
-    }
-
-    // Check bootloader mode (0x48)
-    let bootloader_detected = std::process::Command::new("i2cdetect")
-        .args(["-y", &i2c_bus.to_string(), "0x48", "0x48"])
-        .output()
-        .map(|output| {
-            output.status.success() && String::from_utf8_lossy(&output.stdout).contains("48")
-        })
-        .unwrap_or(false);
-
-    if bootloader_detected {
-        return Ok(DeviceMode::BootloaderMode);
-    }
-
-    // Device not found in either mode
-    Err(RadarError::NotConnected)
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum DeviceMode {
-    RunMode,
-    BootloaderMode,
-}
-
-/// Check if the module is likely unprogrammed by trying to detect it on I2C
-fn is_likely_unprogrammed_module(cli: &Cli) -> bool {
-    // Try to detect the module on the I2C bus using i2cdetect
-    let i2c_bus = cli.i2c_bus;
-    let address = cli.i2c_address;
-
-    // Check if i2cdetect is available
-    if std::process::Command::new("i2cdetect")
-        .arg("--help")
-        .output()
-        .map(|output| !output.status.success())
-        .unwrap_or(true)
-    {
-        // i2cdetect not available, assume it might be unprogrammed
-        return true;
-    }
-
-    // Check both run mode (0x52) and bootloader mode (0x48) addresses
-    let run_mode_detected = std::process::Command::new("i2cdetect")
-        .args([
-            "-y",
-            &i2c_bus.to_string(),
-            &format!("0x{address:02x}"),
-            &format!("0x{address:02x}"),
-        ])
-        .output()
-        .map(|output| {
-            output.status.success()
-                && String::from_utf8_lossy(&output.stdout).contains(&format!("{address:02x}"))
-        })
-        .unwrap_or(false);
-
-    let bootloader_detected = std::process::Command::new("i2cdetect")
-        .args(["-y", &i2c_bus.to_string(), "0x48", "0x48"])
-        .output()
-        .map(|output| {
-            output.status.success() && String::from_utf8_lossy(&output.stdout).contains("48")
-        })
-        .unwrap_or(false);
-
-    // If neither address responds, likely unprogrammed or not present
-    !run_mode_detected && !bootloader_detected
-}
-
-/// Print helpful instructions for unprogrammed modules
-fn print_unprogrammed_module_help(cli: &Cli) {
-    println!("❌ XM125 Module Not Found or Not Programmed");
+    println!("⚠️  WARNING: This will completely erase the XM125 chip!");
+    println!("   The module will need to be reprogrammed before it can be used again.");
+    println!("   This operation cannot be undone.");
     println!();
-    println!(
-        "The XM125 radar module is not responding on I2C bus {} at address 0x{:02X}.",
-        cli.i2c_bus, cli.i2c_address
-    );
-    println!();
-    println!("🔧 Possible Solutions:");
-    println!();
-    println!("1. **Check Hardware Connection:**");
-    println!("   - Verify I2C connections (SDA, SCL, GND, VCC)");
-    println!("   - Ensure module is powered (3.3V)");
-    println!("   - Check I2C bus number: {}", cli.i2c_bus);
-    println!();
-    println!("2. **Reset Module to Run Mode:**");
-    println!("   sudo {} --reset-run", cli.control_script);
-    println!();
-    println!("3. **Program Module Firmware:**");
-    println!("   If this is a new/blank module, program it with presence firmware:");
-    println!("   sudo {APP_NAME} firmware update presence");
-    println!();
-    println!("4. **Scan I2C Bus:**");
-    println!("   sudo i2cdetect -y {}", cli.i2c_bus);
-    println!("   Look for devices at 0x48 (bootloader) or 0x52 (run mode)");
-    println!();
-    println!("5. **Check Permissions:**");
-    println!("   Ensure you're running with sudo for I2C access:");
-    println!("   sudo {APP_NAME} status");
-    println!();
-    println!("💡 For new modules, start with step 3 to program the firmware.");
-}
 
-/// Get current firmware info for firmware check command
-fn get_current_firmware_info_for_check(
-    cli: &Cli,
-) -> Result<(u32, firmware::FirmwareType), RadarError> {
-    // Create I2C device and radar instance for reading firmware info
-    let i2c_device_path = cli.get_i2c_device_path();
-    let mut i2c_device = i2c::I2cDevice::new(&i2c_device_path, cli.i2c_address)?;
+    let manager =
+        firmware::FirmwareManager::new("/lib/firmware/acconeer", "/usr/bin/xm125-control.sh", 0x52);
+    manager.erase_chip().await?;
 
-    // Configure GPIO if pins are specified
-    if cli.wakeup_pin.is_some() || cli.int_pin.is_some() {
-        i2c_device.configure_gpio(cli.wakeup_pin, cli.int_pin)?;
-    }
-
-    let mut radar = radar::XM125Radar::new(i2c_device);
-
-    // Try to connect and read application ID
-    match radar.connect() {
-        Ok(()) => {
-            let app_id = radar.read_application_id()?;
-            let firmware_type = firmware::FirmwareType::from_app_id(app_id);
-            Ok((app_id, firmware_type))
-        }
-        Err(e) => {
-            warn!("Could not connect to read firmware info: {e}");
-            Err(e)
-        }
-    }
-}
-
-/// Check if the control script exists and is executable
-fn check_control_script(script_path: &str) -> Result<(), RadarError> {
-    let path = std::path::Path::new(script_path);
-
-    if !path.exists() {
-        return Err(RadarError::DeviceError {
-            message: format!(
-                "XM125 control script not found: {script_path}\n\
-                This script is required for GPIO control and firmware operations.\n\
-                Please ensure the xm125-radar-monitor package is properly installed."
-            ),
-        });
-    }
-
-    // Check if it's executable (on Unix systems)
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        if let Ok(metadata) = path.metadata() {
-            let permissions = metadata.permissions();
-            if permissions.mode() & 0o111 == 0 {
-                return Err(RadarError::DeviceError {
-                    message: format!(
-                        "XM125 control script is not executable: {script_path}\n\
-                        Run: sudo chmod +x {script_path}"
-                    ),
-                });
-            }
-        }
-    }
-
-    Ok(())
-}
-
-/// Handle GPIO command
-fn handle_gpio_command(action: &GpioAction, cli: &Cli) -> Result<(), RadarError> {
-    let gpio_pins = cli.get_gpio_pins();
-    let mut gpio_controller = gpio::XM125GpioController::with_pins(gpio_pins);
-
-    match action {
-        GpioAction::Init => {
-            info!("🔧 Initializing XM125 GPIO pins...");
-            gpio_controller.initialize()?;
-            gpio_controller.show_gpio_status()?;
-            info!("✅ GPIO initialization completed successfully");
-        }
-        GpioAction::Status => {
-            // Try to show status even if not initialized
-            info!("📊 Current XM125 GPIO Status:");
-            println!("==========================");
-            println!(
-                "Reset (GPIO{}):     {} (1=released, 0=asserted)",
-                gpio_pins.reset,
-                gpio_controller
-                    .get_gpio_value(gpio_pins.reset)
-                    .map_or_else(|_| "?".to_string(), |v| format!("{v}"))
-            );
-            println!(
-                "MCU Int (GPIO{}):    {} (1=ready, 0=not ready)",
-                gpio_pins.mcu_interrupt,
-                gpio_controller
-                    .get_gpio_value(gpio_pins.mcu_interrupt)
-                    .map_or_else(|_| "?".to_string(), |v| format!("{v}"))
-            );
-            println!(
-                "Wake Up (GPIO{}):    {} (1=awake, 0=sleep)",
-                gpio_pins.wake_up,
-                gpio_controller
-                    .get_gpio_value(gpio_pins.wake_up)
-                    .map_or_else(|_| "?".to_string(), |v| format!("{v}"))
-            );
-            println!(
-                "Boot Pin (GPIO{}):   {} (1=bootloader, 0=run mode)",
-                gpio_pins.boot,
-                gpio_controller
-                    .get_gpio_value(gpio_pins.boot)
-                    .map_or_else(|_| "?".to_string(), |v| format!("{v}"))
-            );
-            println!();
-        }
-        GpioAction::ResetRun => {
-            gpio_controller.initialize()?;
-            gpio_controller.reset_to_run_mode()?;
-            gpio_controller.show_gpio_status()?;
-        }
-        GpioAction::ResetBootloader => {
-            gpio_controller.initialize()?;
-            gpio_controller.reset_to_bootloader_mode()?;
-            gpio_controller.show_gpio_status()?;
-        }
-        GpioAction::Test => {
-            gpio_controller.initialize()?;
-            gpio_controller.test_bootloader_control()?;
-            gpio_controller.show_gpio_status()?;
-        }
-    }
+    println!("✅ Chip erase completed successfully");
+    println!("   The XM125 module now needs firmware to be programmed before use.");
 
     Ok(())
 }
 
 /// Handle firmware checksum command
 fn handle_firmware_checksum_command(
-    firmware_type: Option<cli::FirmwareType>,
+    firmware_type: Option<&firmware::FirmwareType>,
     verbose: bool,
-    cli: &Cli,
+    firmware_path: &str,
 ) -> Result<(), RadarError> {
-    let firmware_manager =
-        FirmwareManager::new(&cli.firmware_path, &cli.control_script, cli.i2c_address);
+    let manager = firmware::FirmwareManager::new(firmware_path, "/usr/bin/xm125-control.sh", 0x52);
 
     if let Some(fw_type) = firmware_type {
-        // Calculate checksum for specific firmware type
-        let target_firmware = firmware::FirmwareType::from(fw_type);
-
-        match firmware_manager.calculate_binary_checksum(target_firmware) {
-            Ok(checksum) => {
-                if verbose {
-                    // Show detailed information
-                    let binary_filename = target_firmware.binary_filename();
-                    let binary_path = format!("{}/{}", cli.firmware_path, binary_filename);
-
-                    let file_size = std::fs::metadata(&binary_path)
-                        .map(|m| m.len())
-                        .unwrap_or(0);
-
-                    let detailed_info = format!(
-                        "Firmware: {}\nFile: {}\nPath: {}\nSize: {} bytes\nMD5: {}",
-                        target_firmware.display_name(),
-                        binary_filename,
-                        binary_path,
-                        file_size,
-                        checksum
-                    );
-
-                    output_response(
-                        cli,
-                        "firmware_checksum_detailed",
-                        &detailed_info,
-                        "🔐",
-                        "Firmware Checksum",
-                    )?;
-                } else {
-                    // Show simple checksum
-                    let simple_info = format!("{}: {}", target_firmware.display_name(), checksum);
-                    output_response(
-                        cli,
-                        "firmware_checksum",
-                        &simple_info,
-                        "🔐",
-                        "Firmware Checksum",
-                    )?;
-                }
-            }
-            Err(e) => {
-                let error_msg = format!(
-                    "❌ Could not calculate checksum for {}: {}",
-                    target_firmware.display_name(),
-                    e
-                );
-                output_response(cli, "checksum_error", &error_msg, "❌", "Checksum Error")?;
-            }
+        let checksum = manager.calculate_binary_checksum(*fw_type)?;
+        if verbose {
+            println!(
+                "Firmware: {} ({})",
+                fw_type.display_name(),
+                fw_type.binary_filename()
+            );
+            println!("MD5: {checksum}");
+        } else {
+            println!("{}: {}", fw_type.display_name(), checksum);
         }
     } else {
         // Calculate checksums for all firmware types
-        let firmware_types = [
+        for fw_type in [
             firmware::FirmwareType::Distance,
             firmware::FirmwareType::Presence,
-            firmware::FirmwareType::Breathing,
-        ];
-
-        let mut results = Vec::new();
-        let mut has_errors = false;
-
-        for fw_type in &firmware_types {
-            match firmware_manager.calculate_binary_checksum(*fw_type) {
+        ] {
+            match manager.calculate_binary_checksum(fw_type) {
                 Ok(checksum) => {
                     if verbose {
-                        let binary_filename = fw_type.binary_filename();
-                        let binary_path = format!("{}/{}", cli.firmware_path, binary_filename);
-
-                        let file_size = std::fs::metadata(&binary_path)
-                            .map(|m| m.len())
-                            .unwrap_or(0);
-
-                        results.push(format!(
-                            "{}: {}\n  File: {} ({} bytes)",
+                        println!(
+                            "Firmware: {} ({})",
                             fw_type.display_name(),
-                            checksum,
-                            binary_filename,
-                            file_size
-                        ));
+                            fw_type.binary_filename()
+                        );
+                        println!("MD5: {checksum}");
+                        println!();
                     } else {
-                        results.push(format!("{}: {}", fw_type.display_name(), checksum));
+                        println!("{}: {}", fw_type.display_name(), checksum);
                     }
                 }
                 Err(e) => {
-                    results.push(format!("{}: ❌ Error - {}", fw_type.display_name(), e));
-                    has_errors = true;
+                    eprintln!(
+                        "Error calculating checksum for {}: {}",
+                        fw_type.display_name(),
+                        e
+                    );
                 }
             }
         }
+    }
+    Ok(())
+}
 
-        let all_results = results.join("\n");
-        let icon = if has_errors { "⚠️" } else { "🔐" };
-        let title = if has_errors {
-            "Firmware Checksums (with errors)"
-        } else {
-            "Firmware Checksums"
-        };
+/// Handle bootloader command
+async fn handle_bootloader_command(cli: &Cli, test_mode: bool) -> Result<(), RadarError> {
+    let gpio_pins = cli.get_gpio_pins();
+    let mut gpio_controller = XM125GpioController::with_pins(gpio_pins);
 
-        output_response(cli, "firmware_checksums_all", &all_results, icon, title)?;
+    gpio_controller.initialize()?;
+
+    if test_mode {
+        println!("🧪 Testing bootloader mode (will reset back to run mode)");
+        gpio_controller.reset_to_bootloader_mode()?;
+
+        // Wait a moment
+        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+
+        println!("🔄 Resetting back to run mode");
+        gpio_controller.reset_to_run_mode()?;
+
+        println!("✅ Bootloader test completed");
+    } else {
+        println!("🔄 Putting XM125 into bootloader mode...");
+        gpio_controller.reset_to_bootloader_mode()?;
+
+        println!("✅ XM125 is now in bootloader mode (I2C address 0x48)");
+        println!("   Ready for firmware programming with stm32flash");
+        println!("   Use 'xm125-radar-monitor gpio reset-run' to return to normal mode");
     }
 
     Ok(())
 }
 
-/// Handle firmware erase command
-async fn handle_firmware_erase_command(confirm: bool, cli: &Cli) -> Result<(), RadarError> {
-    // Safety check - require explicit confirmation
-    if !confirm {
-        let error_msg = "❌ Chip erase requires explicit confirmation.\n\
-            Use: firmware erase --confirm\n\
-            ⚠️  WARNING: This will completely erase all firmware from the XM125 module!\n\
-            The module will need to be reprogrammed before it can be used again.";
-        output_response(cli, "erase_error", error_msg, "❌", "Erase Error")?;
-        return Ok(());
-    }
+/// Handle GPIO commands
+fn handle_gpio_command(cli: &Cli, action: &GpioAction) -> Result<(), RadarError> {
+    let gpio_pins = cli.get_gpio_pins();
+    let mut gpio_controller = XM125GpioController::with_pins(gpio_pins);
 
-    // Show warning and require additional confirmation in interactive mode
-    if !cli.quiet {
-        println!("⚠️  WARNING: You are about to completely erase the XM125 chip!");
-        println!("⚠️  This operation cannot be undone!");
-        println!("⚠️  The module will need firmware programming before it can be used again!");
-        println!();
-        println!("Proceeding with chip erase in 3 seconds...");
-        println!("Press Ctrl+C to cancel");
-
-        // Give user time to cancel
-        tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
-    }
-
-    let firmware_manager =
-        FirmwareManager::new(&cli.firmware_path, &cli.control_script, cli.i2c_address);
-
-    info!("🗑️  Starting XM125 chip erase operation...");
-
-    match firmware_manager.erase_chip().await {
-        Ok(()) => {
-            let success_msg = "🗑️  XM125 chip has been completely erased!\n\
-                ⚠️  The module will need firmware programming before it can be used again.\n\
-                💡 Use 'firmware update <type>' to program new firmware.";
-            output_response(cli, "chip_erase", success_msg, "🗑️", "Chip Erase")?;
+    match action {
+        GpioAction::Init => {
+            gpio_controller.initialize()?;
+            println!("✅ GPIO pins initialized successfully");
         }
-        Err(e) => {
-            let error_msg = format!("❌ Chip erase failed: {e}");
-            output_response(cli, "erase_error", &error_msg, "❌", "Erase Error")?;
-            return Err(e);
+        GpioAction::Status => {
+            gpio_controller.show_gpio_status()?;
         }
-    }
-
-    Ok(())
-}
-
-/// Handle bootloader command to put XM125 into bootloader mode
-fn handle_bootloader_command(reset: bool, cli: &Cli) -> Result<(), RadarError> {
-    // Check if control script exists and is executable
-    if let Err(e) = check_control_script(&cli.control_script) {
-        output_response(
-            cli,
-            "bootloader_error",
-            &e.to_string(),
-            "❌",
-            "Bootloader Error",
-        )?;
-        return Err(e);
-    }
-
-    info!("Putting XM125 module into bootloader mode...");
-
-    // Use the control script to put device into bootloader mode
-    let output = std::process::Command::new(&cli.control_script)
-        .arg("--bootloader")
-        .output()
-        .map_err(|e| RadarError::DeviceError {
-            message: format!("Failed to execute control script: {e}"),
-        })?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let error_msg = format!("Failed to enter bootloader mode: {stderr}");
-        output_response(
-            cli,
-            "bootloader_error",
-            &error_msg,
-            "❌",
-            "Bootloader Error",
-        )?;
-        return Err(RadarError::DeviceError { message: error_msg });
-    }
-
-    let success_msg = "✅ XM125 module is now in bootloader mode (I2C address 0x48)\n\
-         Use 'stm32flash' or firmware update commands to program the module.\n\
-         The module will remain in bootloader mode until reset or power cycled."
-        .to_string();
-    output_response(cli, "bootloader", &success_msg, "🔧", "Bootloader Mode")?;
-
-    // If reset flag is set, reset back to run mode
-    if reset {
-        info!("Resetting module back to run mode...");
-
-        let reset_output = std::process::Command::new(&cli.control_script)
-            .arg("--reset-run")
-            .output()
-            .map_err(|e| RadarError::DeviceError {
-                message: format!("Failed to execute reset command: {e}"),
-            })?;
-
-        if reset_output.status.success() {
-            let reset_msg = "✅ Module reset to run mode (I2C address 0x52)";
-            output_response(cli, "reset", reset_msg, "🔄", "Reset Complete")?;
-        } else {
-            let stderr = String::from_utf8_lossy(&reset_output.stderr);
-            let warning_msg = format!("⚠️  Reset to run mode failed: {stderr}");
-            output_response(cli, "reset_warning", &warning_msg, "⚠️", "Reset Warning")?;
+        GpioAction::ResetRun => {
+            gpio_controller.initialize()?;
+            gpio_controller.reset_to_run_mode()?;
+            println!("✅ XM125 reset to run mode (I2C address 0x52)");
+        }
+        GpioAction::ResetBootloader => {
+            gpio_controller.initialize()?;
+            gpio_controller.reset_to_bootloader_mode()?;
+            println!("✅ XM125 reset to bootloader mode (I2C address 0x48)");
+        }
+        GpioAction::Test => {
+            gpio_controller.initialize()?;
+            gpio_controller.test_bootloader_control()?;
         }
     }
 

@@ -1,5 +1,71 @@
 # Changelog
 
+## [2.0.0] - 2025-10-22
+
+### 🚀 Major Restructure - Clean CLI for Technicians
+
+**BREAKING CHANGES**: Complete CLI restructure for simplicity and clarity.
+
+#### ✅ **New Clean Command Structure**
+- **`status`** - Quick device health check
+- **`info`** - Detailed device information  
+- **`distance [OPTIONS]`** - Distance measurements (auto-configures device)
+- **`presence [OPTIONS]`** - Presence detection (auto-configures device)
+- **`firmware <SUBCOMMAND>`** - Firmware management (check|update|verify|erase|checksum|bootloader)
+- **`gpio <SUBCOMMAND>`** - GPIO control (init|status|reset-run|reset-bootloader|test)
+
+#### 🗑️ **Removed Confusing Commands**
+- ❌ `connect`/`disconnect` - Now automatic
+- ❌ `measure` - Use `distance` instead
+- ❌ `combined` - Use separate `distance`/`presence` commands
+- ❌ `breathing` - Removed for simplicity
+- ❌ `calibrate` - Now automatic
+- ❌ `monitor` - Use `--continuous` flag instead
+- ❌ `config` - Use command-specific options instead
+- ❌ `bootloader` - Now `firmware bootloader`
+
+#### 🎯 **Improved User Experience**
+- **Self-contained commands** - No global `--mode` dependencies
+- **Automatic connection** - Commands handle I2C setup automatically
+- **Consistent options** - Similar flags across measurement commands
+- **Global `--debug-registers`** - Works with any measurement command
+- **Continuous monitoring** - Built into `distance` and `presence` commands
+
+#### 📝 **New Command Examples**
+```bash
+# Quick status check
+xm125-radar-monitor status
+
+# Distance measurement
+xm125-radar-monitor distance --range 0.1:3.0 --continuous --count 100
+
+# Presence detection with debugging
+xm125-radar-monitor --debug-registers presence --range long --continuous --save-to data.csv
+
+# Firmware management
+xm125-radar-monitor firmware check
+xm125-radar-monitor firmware update presence
+xm125-radar-monitor firmware bootloader
+
+# GPIO control
+xm125-radar-monitor gpio init
+xm125-radar-monitor gpio reset-run
+```
+
+#### 🔧 **Technical Improvements**
+- Cleaner separation of concerns
+- Reduced code complexity
+- Better error handling
+- Consistent option validation
+- Automatic device configuration
+
+### Migration Guide
+- `xm125-radar-monitor measure` → `xm125-radar-monitor distance`
+- `xm125-radar-monitor presence` → Same (options moved to command level)
+- `xm125-radar-monitor monitor` → Use `--continuous` flag
+- `xm125-radar-monitor bootloader` → `xm125-radar-monitor firmware bootloader`
+- Global `--mode` flag → Use specific command instead
+
 ## [1.7.2] - 2025-10-22
 
 ### Fixed
