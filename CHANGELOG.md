@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.7.1] - 2025-01-22
+
+### Added
+- **Continuous Presence Monitoring**: Added `--continuous` option to presence command for streamlined monitoring
+  - `--continuous`: Enable continuous monitoring mode (replaces need for separate `monitor` command)
+  - `--count <N>`: Number of measurements to take (omit for infinite monitoring)
+  - `--interval <ms>`: Time between measurements in milliseconds (default: 1000ms)
+  - `--save-to <file.csv>`: Save measurements to CSV file with timestamps
+- **Improved Register Debugging**: `--debug-registers` now shows registers after configuration is applied
+- **Enhanced CLI Examples**: Updated help examples to showcase new continuous presence functionality
+
+### Changed
+- **Cleaner UX**: Single `presence` command now handles both single measurements and continuous monitoring
+- **Better Integration**: Register debugging properly integrated with presence command configuration
+- **CSV Dependency**: Added CSV export functionality for continuous monitoring
+
+### Technical Improvements
+- Added `csv` crate dependency for structured data export
+- Implemented `monitor_presence_continuous()` function with proper timing and error handling
+- Enhanced timestamp formatting for both display and CSV output
+- Improved argument validation with proper `requires` relationships
+
 ## [1.7.0] - 2025-01-22
 
 ### Added

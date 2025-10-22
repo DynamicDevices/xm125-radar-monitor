@@ -37,8 +37,8 @@ impl Cli {
 #[command(
     author = "Dynamic Devices Ltd",
     version,
-    about = "XM125 Radar Module Monitor v1.7.0 - Production CLI for Acconeer XM125 radar modules",
-    long_about = "XM125 Radar Module Monitor v1.7.0
+    about = "XM125 Radar Module Monitor v1.7.1 - Production CLI for Acconeer XM125 radar modules",
+    long_about = "XM125 Radar Module Monitor v1.7.1
 
 Production-ready CLI tool for Acconeer XM125 radar modules with automatic firmware 
 management and comprehensive configuration options.
@@ -51,20 +51,20 @@ QUICK START:
   5. Firmware management:        xm125-radar-monitor firmware check
 
 PRESENCE DETECTION EXAMPLES:
-  # Basic presence detection
+  # Basic presence detection (single measurement)
   xm125-radar-monitor presence
 
-  # Long range room occupancy detection
-  xm125-radar-monitor presence --presence-range long
+  # Continuous monitoring with custom range and register debug
+  xm125-radar-monitor --debug-registers presence --min-range 0.3 --max-range 5.0 --continuous --count 100 --interval 500
+
+  # Long range room occupancy monitoring with CSV output
+  xm125-radar-monitor presence --presence-range long --continuous --save-to occupancy.csv
 
   # High sensitivity close proximity detection
-  xm125-radar-monitor presence --presence-range short --sensitivity 2.5
+  xm125-radar-monitor presence --presence-range short --sensitivity 2.5 --continuous --count 50
 
-  # Custom range with balanced settings
-  xm125-radar-monitor presence --min-range 0.3 --max-range 5.0 --sensitivity 1.2
-
-  # Power-efficient monitoring
-  xm125-radar-monitor presence --presence-range long --frame-rate 5.0
+  # Power-efficient infinite monitoring
+  xm125-radar-monitor presence --presence-range long --frame-rate 5.0 --continuous --interval 2000
 
 FIRMWARE & HARDWARE:
   # Check device status and firmware
@@ -313,6 +313,38 @@ pub enum Commands {
             help = "Measurement frequency in Hz (e.g., 12.0 for 12 measurements/second)"
         )]
         frame_rate: Option<f32>,
+
+        /// Enable continuous monitoring mode
+        #[arg(
+            long,
+            help = "Continuously monitor presence detection (use with --count and --interval)"
+        )]
+        continuous: bool,
+
+        /// Number of measurements in continuous mode (0 = infinite)
+        #[arg(
+            long,
+            help = "Number of measurements to take (omit for infinite, requires --continuous)",
+            requires = "continuous"
+        )]
+        count: Option<u32>,
+
+        /// Measurement interval in milliseconds for continuous mode
+        #[arg(
+            long,
+            default_value_t = 1000,
+            help = "Time between measurements in ms (requires --continuous)",
+            requires = "continuous"
+        )]
+        interval: u64,
+
+        /// Save measurements to CSV file (continuous mode only)
+        #[arg(
+            long,
+            help = "Output CSV file path (e.g., presence_data.csv, requires --continuous)",
+            requires = "continuous"
+        )]
+        save_to: Option<String>,
     },
 
     /// Perform combined distance and presence measurement (requires --mode combined)

@@ -413,6 +413,10 @@ async fn execute_command(
             max_range,
             sensitivity,
             frame_rate,
+            continuous,
+            count,
+            interval,
+            save_to,
         } => {
             // Configure presence parameters if specified
             configure_presence_parameters(
@@ -424,19 +428,33 @@ async fn execute_command(
                 frame_rate,
             )?;
 
-            let result = radar.measure_presence().await?;
-            let response = format!(
-                "Presence: {}, Distance: {:.2}m, Intra: {:.2}, Inter: {:.2}",
-                if result.presence_detected {
-                    "DETECTED"
-                } else {
-                    "NOT DETECTED"
-                },
-                result.presence_distance,
-                result.intra_presence_score,
-                result.inter_presence_score
-            );
-            output_response(cli, "presence", &response, "👁️", "Presence Detection")?;
+            // Debug registers after configuration if requested
+            if cli.debug_registers && radar.is_connected() {
+                if let Err(e) = radar.debug_registers("Presence") {
+                    warn!("Failed to debug registers: {e}");
+                }
+            }
+
+            if continuous {
+                // Continuous monitoring mode
+                monitor_presence_continuous(radar, cli, count, interval, save_to.as_deref())
+                    .await?;
+            } else {
+                // Single measurement mode
+                let result = radar.measure_presence().await?;
+                let response = format!(
+                    "Presence: {}, Distance: {:.2}m, Intra: {:.2}, Inter: {:.2}",
+                    if result.presence_detected {
+                        "DETECTED"
+                    } else {
+                        "NOT DETECTED"
+                    },
+                    result.presence_distance,
+                    result.intra_presence_score,
+                    result.inter_presence_score
+                );
+                output_response(cli, "presence", &response, "👁️", "Presence Detection")?;
+            }
         }
         Commands::Combined => {
             let result = radar.measure_combined().await?;
@@ -513,19 +531,8 @@ async fn execute_command(
         }
     }
 
-    // If register debugging is enabled, dump all registers after command execution
-    if cli.debug_registers && radar.is_connected() {
-        let detector_mode = match cli.mode {
-            cli::DetectorMode::Distance => "Distance",
-            cli::DetectorMode::Presence => "Presence",
-            cli::DetectorMode::Breathing => "Breathing",
-            cli::DetectorMode::Combined => "Combined",
-        };
-
-        if let Err(e) = radar.debug_registers(detector_mode) {
-            warn!("Failed to debug registers: {e}");
-        }
-    }
+    // Note: Register debugging is now handled within individual commands
+    // to show registers after configuration is applied
 
     Ok(())
 }
@@ -785,6 +792,137 @@ fn output_response(
     Ok(())
 }
 
+/// Monitor presence detection continuously
+#[allow(clippy::too_many_lines)] // Complex monitoring function with multiple output formats
+async fn monitor_presence_continuous(
+    radar: &mut radar::XM125Radar,
+    cli: &Cli,
+    count: Option<u32>,
+    interval: u64,
+    save_to: Option<&str>,
+) -> Result<(), RadarError> {
+    use tokio::time::{sleep, Duration};
+
+    let mut csv_writer = if let Some(filename) = save_to {
+        let file = std::fs::File::create(filename).map_err(|e| RadarError::DeviceError {
+            message: format!("Failed to create CSV file '{filename}': {e}"),
+        })?;
+        let mut writer = csv::Writer::from_writer(file);
+
+        // Write CSV header
+        writer
+            .write_record([
+                "timestamp",
+                "presence_detected",
+                "presence_distance_m",
+                "intra_score",
+                "inter_score",
+            ])
+            .map_err(|e| RadarError::DeviceError {
+                message: format!("Failed to write CSV header: {e}"),
+            })?;
+
+        Some(writer)
+    } else {
+        None
+    };
+
+    let total_count = count.unwrap_or(0);
+    let infinite = total_count == 0;
+
+    if !cli.quiet {
+        if infinite {
+            println!("🔄 Starting continuous presence monitoring (Ctrl+C to stop)");
+        } else {
+            println!("🔄 Starting presence monitoring ({total_count} measurements)");
+        }
+        println!("📊 Interval: {interval}ms");
+        if save_to.is_some() {
+            println!("💾 Saving to: {}", save_to.unwrap());
+        }
+        println!("────────────────────────────────────────────────────────────");
+    }
+
+    let mut measurement_count = 0u32;
+
+    loop {
+        let start_time = std::time::Instant::now();
+
+        match radar.measure_presence().await {
+            Ok(result) => {
+                measurement_count += 1;
+                let timestamp = chrono::Utc::now();
+                let timestamp_full = timestamp.format("%Y-%m-%d %H:%M:%S%.3f UTC").to_string();
+                let timestamp_short = timestamp.format("%H:%M:%S%.3f").to_string();
+
+                // Display result
+                if !cli.quiet {
+                    let status = if result.presence_detected {
+                        "DETECTED"
+                    } else {
+                        "NOT DETECTED"
+                    };
+                    println!(
+                        "[{}] #{:3} Presence: {}, Distance: {:.2}m, Intra: {:.2}, Inter: {:.2}",
+                        timestamp_short,
+                        measurement_count,
+                        status,
+                        result.presence_distance,
+                        result.intra_presence_score,
+                        result.inter_presence_score
+                    );
+                }
+
+                // Save to CSV if requested
+                if let Some(ref mut writer) = csv_writer {
+                    writer
+                        .write_record([
+                            timestamp_full.as_str(),
+                            &result.presence_detected.to_string(),
+                            &result.presence_distance.to_string(),
+                            &result.intra_presence_score.to_string(),
+                            &result.inter_presence_score.to_string(),
+                        ])
+                        .map_err(|e| RadarError::DeviceError {
+                            message: format!("Failed to write CSV record: {e}"),
+                        })?;
+                    writer.flush().map_err(|e| RadarError::DeviceError {
+                        message: format!("Failed to flush CSV writer: {e}"),
+                    })?;
+                }
+
+                // Check if we've reached the target count
+                if !infinite && measurement_count >= total_count {
+                    break;
+                }
+            }
+            Err(e) => {
+                eprintln!("❌ Measurement #{} failed: {}", measurement_count + 1, e);
+                if !infinite && measurement_count >= total_count {
+                    break;
+                }
+            }
+        }
+
+        // Wait for the specified interval
+        let elapsed = start_time.elapsed();
+        let target_duration = Duration::from_millis(interval);
+        if elapsed < target_duration {
+            sleep(target_duration - elapsed).await;
+        }
+    }
+
+    if !cli.quiet {
+        println!("────────────────────────────────────────────────────────────");
+        println!("✅ Completed {measurement_count} presence measurements");
+        if let Some(filename) = save_to {
+            println!("💾 Results saved to: {filename}");
+        }
+    }
+
+    Ok(())
+}
+
 /// Configure presence parameters for the radar
 fn configure_presence_parameters(
     radar: &mut radar::XM125Radar,
@@ -857,10 +995,15 @@ fn configure_presence_parameters(
         config_changed = true;
     }
 
-    // Apply configuration to hardware if anything changed
-    if config_changed {
+    // Apply configuration to hardware if anything changed OR if no range was specified
+    // (to ensure default long range is properly applied)
+    if config_changed || (presence_range.is_none() && min_range.is_none() && max_range.is_none()) {
         radar.configure_presence_range();
-        info!("✅ Presence parameters configured successfully");
+        if config_changed {
+            info!("✅ Presence parameters configured successfully");
+        } else {
+            info!("✅ Applied default presence configuration (long range: 0.5m - 7.0m)");
+        }
     }
 
     Ok(())
