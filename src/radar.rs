@@ -1983,28 +1983,52 @@ impl XM125Radar {
             "────────────────────────────────────────────────────────────────────────────────"
         );
 
-        // Configuration registers (estimated addresses)
+        // Core presence configuration registers from presence_reg_protocol.h
         self.debug_register(
-            REG_PRESENCE_START,
-            "Start Range",
-            "Presence detection start distance (mm)",
+            64,
+            "Sweeps Per Frame",
+            "Number of sweeps per measurement frame",
         )?;
         self.debug_register(
-            REG_PRESENCE_END,
-            "End Range",
-            "Presence detection end distance (mm)",
+            65,
+            "Inter Frame Timeout",
+            "Presence timeout in seconds (0-30)",
         )?;
         self.debug_register(
-            REG_INTRA_DETECTION_THRESHOLD,
+            66,
+            "Inter Phase Boost",
+            "Phase boost for slow motion detection",
+        )?;
+        self.debug_register(67, "Intra Detection", "Fast motion detection enable (0/1)")?;
+        self.debug_register(68, "Inter Detection", "Slow motion detection enable (0/1)")?;
+        self.debug_register(69, "Frame Rate", "Frame rate in mHz (value * 1000)")?;
+        self.debug_register(
+            70,
             "Intra Threshold",
-            "Fast motion detection threshold",
+            "Fast motion threshold (value * 1000)",
         )?;
         self.debug_register(
-            REG_INTER_DETECTION_THRESHOLD,
+            71,
             "Inter Threshold",
-            "Slow motion detection threshold",
+            "Slow motion threshold (value * 1000)",
         )?;
-        self.debug_register(REG_FRAME_RATE, "Frame Rate", "Measurement frequency (mHz)")?;
+        self.debug_register(72, "Inter Dev Time", "Inter-frame deviation time constant")?;
+        self.debug_register(73, "Inter Fast Cutoff", "Fast filter cutoff frequency")?;
+        self.debug_register(74, "Inter Slow Cutoff", "Slow filter cutoff frequency")?;
+        self.debug_register(75, "Intra Frame Time", "Intra-frame time constant")?;
+        self.debug_register(76, "Intra Output Time", "Intra output time constant")?;
+        self.debug_register(77, "Inter Output Time", "Inter output time constant")?;
+        self.debug_register(78, "Auto Profile", "Auto profile selection enable (0/1)")?;
+        self.debug_register(79, "Auto Step Length", "Auto step length enable (0/1)")?;
+        self.debug_register(80, "Manual Profile", "Manual profile (1-5)")?;
+        self.debug_register(81, "Manual Step Length", "Manual step length")?;
+        self.debug_register(82, "Start Point", "Start distance in mm * 1000")?;
+        self.debug_register(83, "End Point", "End distance in mm * 1000")?;
+        self.debug_register(84, "Reset Filters", "Reset filters on prepare (0/1)")?;
+        self.debug_register(85, "HWAAS", "Hardware accelerated average samples")?;
+        self.debug_register(86, "Auto Subsweeps", "Automatic subsweeps enable (0/1)")?;
+        self.debug_register(87, "Signal Quality", "Signal quality threshold")?;
+        self.debug_register(128, "Detection GPIO", "Output detection on GPIO (0/1)")?;
 
         println!("\n📊 Presence Detector Results:");
         println!(
@@ -2017,26 +2041,34 @@ impl XM125Radar {
             "────────────────────────────────────────────────────────────────────────────────"
         );
 
-        // Result registers
+        // Core presence result registers from presence_reg_protocol.h
+        self.debug_register(0, "Version", "RSS version (major.minor.patch)")?;
+        self.debug_register(1, "Protocol Status", "Protocol error flags")?;
+        self.debug_register(2, "Measure Counter", "Number of measurements since restart")?;
+        self.debug_register(3, "Detector Status", "Detector status flags")?;
         self.debug_register(
-            REG_PRESENCE_RESULT,
+            16,
             "Presence Result",
-            "Presence detection flag (0/1)",
+            "Presence detection result & temperature",
         )?;
         self.debug_register(
-            REG_PRESENCE_DISTANCE,
+            17,
             "Presence Distance",
             "Distance to detected presence (mm)",
         )?;
+        self.debug_register(18, "Intra Score", "Fast motion detection score")?;
+        self.debug_register(19, "Inter Score", "Slow motion detection score")?;
+        self.debug_register(32, "Actual Frame Rate", "Actual frame rate in mHz")?;
+
+        // Application ID register
+        println!("\n🆔 Application Information:");
+        println!(
+            "────────────────────────────────────────────────────────────────────────────────"
+        );
         self.debug_register(
-            REG_INTRA_PRESENCE_SCORE,
-            "Intra Score",
-            "Fast motion detection score",
-        )?;
-        self.debug_register(
-            REG_INTER_PRESENCE_SCORE,
-            "Inter Score",
-            "Slow motion detection score",
+            REG_APPLICATION_ID,
+            "Application ID",
+            "Firmware application identifier",
         )?;
 
         Ok(())
