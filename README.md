@@ -7,7 +7,7 @@
 
 Production-ready CLI tool for Acconeer XM125 radar modules with automatic firmware management and comprehensive configuration options.
 
-**Version**: 1.7.0  
+**Version**: 1.7.1  
 **Maintainer**: Alex J Lennon (ajlennon@dynamicdevices.co.uk)  
 **Copyright**: © 2025 Dynamic Devices Ltd. All rights reserved.
 
@@ -16,9 +16,9 @@ Production-ready CLI tool for Acconeer XM125 radar modules with automatic firmwa
 - **Multi-mode Detection**: Distance, presence, and breathing detection
 - **Automatic Firmware Management**: Auto-detects and updates firmware via `stm32flash`
 - **Comprehensive Configuration**: Direct parameter control for presence detection
+- **Continuous Monitoring**: Unified single/continuous operation with CSV export
 - **Internal GPIO Control**: Hardware reset and bootloader control without external scripts
 - **I2C Communication**: Direct hardware interface with robust error handling
-- **Real-time Monitoring**: Continuous measurements with CSV export
 - **Register Debugging**: Complete register dumps for evaluation tool comparison
 - **Cross-compilation**: Native ARM64 builds for embedded targets
 
@@ -28,17 +28,14 @@ Production-ready CLI tool for Acconeer XM125 radar modules with automatic firmwa
 # Check device status
 sudo xm125-radar-monitor status
 
-# Basic presence detection
+# Basic presence detection (single measurement, default long range)
 sudo xm125-radar-monitor presence
 
-# Presence with long range and high sensitivity
-sudo xm125-radar-monitor presence --presence-range long --sensitivity 2.0
+# Continuous monitoring with custom range and register debug
+sudo xm125-radar-monitor --debug-registers presence --min-range 0.3 --max-range 5.0 --continuous --count 100 --interval 500
 
-# Custom range configuration
-sudo xm125-radar-monitor presence --min-range 0.3 --max-range 5.0 --frame-rate 20.0
-
-# Continuous monitoring with CSV output
-sudo xm125-radar-monitor monitor --count 100 --save-to data.csv
+# Infinite monitoring with CSV export
+sudo xm125-radar-monitor presence --presence-range long --continuous --save-to occupancy.csv
 ```
 
 ## Hardware Requirements
@@ -53,12 +50,12 @@ sudo xm125-radar-monitor monitor --count 100 --save-to data.csv
 ### Range Options
 
 ```bash
-# Preset ranges
+# Preset ranges (default: long)
 --presence-range short    # 6cm - 70cm (close proximity)
 --presence-range medium   # 20cm - 2m (balanced)
---presence-range long     # 50cm - 7m (room occupancy)
+--presence-range long     # 50cm - 7m (room occupancy, default)
 
-# Custom ranges (both required)
+# Custom ranges (both required, conflicts with presets)
 --min-range 0.3 --max-range 5.0   # Custom 30cm - 5m range
 ```
 
@@ -72,17 +69,51 @@ sudo xm125-radar-monitor monitor --count 100 --save-to data.csv
 --frame-rate 20.0
 ```
 
-### Complete Examples
+### Continuous Monitoring
 
 ```bash
+# Enable continuous mode
+--continuous
+
+# Number of measurements (omit for infinite)
+--count 100
+
+# Measurement interval in milliseconds
+--interval 500
+
+# Save to CSV file
+--save-to presence_data.csv
+```
+
+## Complete Usage Examples
+
+### Single Measurements
+
+```bash
+# Basic presence detection (default long range: 0.5m - 7.0m)
+sudo xm125-radar-monitor presence
+
 # High-sensitivity close proximity detection
 sudo xm125-radar-monitor presence --presence-range short --sensitivity 2.5
 
-# Power-efficient room occupancy monitoring
-sudo xm125-radar-monitor presence --presence-range long --sensitivity 0.8 --frame-rate 5.0
-
 # Custom range with balanced settings
-sudo xm125-radar-monitor presence --min-range 0.5 --max-range 3.0 --sensitivity 1.2 --frame-rate 15.0
+sudo xm125-radar-monitor presence --min-range 0.5 --max-range 3.0 --sensitivity 1.2
+```
+
+### Continuous Monitoring
+
+```bash
+# Continuous monitoring with register debugging
+sudo xm125-radar-monitor --debug-registers presence --min-range 0.3 --max-range 5.0 --continuous --count 100 --interval 500
+
+# Long range room occupancy monitoring with CSV output
+sudo xm125-radar-monitor presence --presence-range long --continuous --save-to occupancy.csv
+
+# Power-efficient infinite monitoring (2 second intervals)
+sudo xm125-radar-monitor presence --presence-range long --frame-rate 5.0 --continuous --interval 2000
+
+# High-frequency monitoring for 50 measurements
+sudo xm125-radar-monitor presence --presence-range short --sensitivity 2.0 --continuous --count 50 --interval 200
 ```
 
 ## Firmware Management
@@ -127,11 +158,29 @@ sudo xm125-radar-monitor gpio reset-bootloader
 Compare configuration with Acconeer evaluation tools:
 
 ```bash
-# Debug presence registers
+# Debug presence registers with default configuration
 sudo xm125-radar-monitor --debug-registers presence
 
 # Debug with custom configuration
-sudo xm125-radar-monitor --debug-registers presence --presence-range medium --sensitivity 1.8
+sudo xm125-radar-monitor --debug-registers presence --min-range 0.3 --max-range 5.0 --sensitivity 1.8
+
+# Debug during continuous monitoring
+sudo xm125-radar-monitor --debug-registers presence --presence-range medium --continuous --count 10
+```
+
+**Example Register Output:**
+```
+================================================================================
+XM125 Register Dump - Presence Mode
+================================================================================
+
+👤 Presence Detector Configuration:
+────────────────────────────────────────────────────────────────────────────────
+  0x0040 ( 64) │ Start Range               │ 0x0000012C (        300) │ Presence detection start distance (mm)
+  0x0041 ( 65) │ End Range                 │ 0x00001388 (       5000) │ Presence detection end distance (mm)
+  0x0042 ( 66) │ Intra Threshold           │ 0x00000708 (       1800) │ Fast motion detection threshold
+  0x0043 ( 67) │ Inter Threshold           │ 0x00000640 (       1600) │ Slow motion detection threshold
+================================================================================
 ```
 
 ## Detection Modes
@@ -189,13 +238,14 @@ scp target/aarch64-unknown-linux-gnu/release/xm125-radar-monitor user@target:/us
 | Unknown command errors | Reset device: `sudo xm125-radar-monitor gpio reset-run` |
 | Calibration timeout | Check hardware connections and power |
 | Firmware update fails | Ensure device in bootloader mode: `sudo xm125-radar-monitor bootloader` |
+| Register values incorrect | Use `--debug-registers` to verify configuration is applied |
 
 Use `--verbose` for detailed I2C transaction logs and debugging information.
 
 ## Dependencies
 
 - **Runtime**: `stm32flash`, `i2cdetect`, `i2cget`
-- **Build**: Rust 1.70+, cross-compilation toolchain for ARM64
+- **Build**: Rust 1.70+, cross-compilation toolchain for ARM64, `csv` crate
 - **Hardware**: Linux GPIO sysfs interface
 
 ## License
@@ -204,4 +254,4 @@ Licensed under GNU General Public License v3.0. See [LICENSE](LICENSE) for detai
 
 ---
 
-**Keywords**: Acconeer XM125, radar sensor, I2C communication, firmware management, distance detection, presence detection, embedded Linux, ARM64, cross-compilation, stm32flash
+**Keywords**: Acconeer XM125, radar sensor, I2C communication, firmware management, distance detection, presence detection, embedded Linux, ARM64, cross-compilation, stm32flash, continuous monitoring, CSV export
