@@ -445,18 +445,39 @@ impl XM125Radar {
     pub fn connect(&mut self) -> Result<()> {
         info!("Connecting to XM125 radar module...");
 
-        // Check if device is responsive
+        // First, try to connect without any warnings
         match self.get_status_raw() {
             Ok(_) => {
                 self.is_connected = true;
                 info!("Successfully connected to XM125");
-                Ok(())
+                return Ok(());
             }
-            Err(e) => {
-                warn!("Failed to connect to XM125: {e}");
-                Err(RadarError::NotConnected)
+            Err(_) => {
+                // Device not responding - try to initialize it properly before warning
+                debug!("Initial connection failed, attempting hardware initialization...");
             }
         }
+
+        // Try hardware reset to ensure module is in run mode
+        if let Err(reset_err) = self.reset_xm125_to_run_mode() {
+            debug!("Hardware reset failed: {reset_err}");
+        } else {
+            // Give module time to initialize after reset
+            std::thread::sleep(std::time::Duration::from_millis(1000));
+
+            // Try connection again after reset
+            if self.get_status_raw().is_ok() {
+                self.is_connected = true;
+                info!("Successfully connected to XM125 after hardware initialization");
+                return Ok(());
+            }
+            // Still not working after reset
+        }
+
+        // Only issue warning after we've tried proper initialization
+        warn!("Failed to connect to XM125: I2C communication error after hardware initialization");
+        warn!("XM125 not detected on I2C bus - check hardware connections and power");
+        Err(RadarError::NotConnected)
     }
 
     pub fn disconnect(&mut self) {
@@ -1111,24 +1132,22 @@ impl XM125Radar {
     pub async fn connect_async(&mut self) -> Result<()> {
         info!("Connecting to XM125 radar module...");
 
-        // Check if device is responsive
-        match self.get_status_raw() {
-            Ok(_) => {
-                self.is_connected = true;
-                info!("Successfully connected to XM125");
+        // First, try to connect without any warnings
+        if self.get_status_raw().is_ok() {
+            self.is_connected = true;
+            info!("Successfully connected to XM125");
 
-                // Validate firmware matches the requested detector mode
-                self.validate_firmware_compatibility()?;
+            // Validate firmware matches the requested detector mode
+            self.validate_firmware_compatibility()?;
 
-                // Configure the detector based on current mode
-                self.configure_detector().await?;
+            // Configure the detector based on current mode
+            self.configure_detector().await?;
 
-                Ok(())
-            }
-            Err(e) => {
-                warn!("Failed to connect to XM125: {e}");
-                Err(RadarError::NotConnected)
-            }
+            Ok(())
+        } else {
+            // Device not responding - let auto_connect handle the initialization and warnings
+            debug!("Initial async connection failed, will be handled by auto_connect retry logic");
+            Err(RadarError::NotConnected)
         }
     }
 

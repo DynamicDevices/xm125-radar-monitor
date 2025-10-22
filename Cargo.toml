@@ -1,6 +1,6 @@
 [package]
 name = "xm125-radar-monitor"
-version = "1.6.0"
+version = "1.6.1"
 edition = "2021"
 license = "GPL-3.0-or-later"
 description = "Embedded Rust application for XM125 radar module monitoring and distance detection"
