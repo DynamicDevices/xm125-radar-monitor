@@ -37,67 +37,64 @@ impl Cli {
 #[command(
     author = "Dynamic Devices Ltd",
     version,
-    about = "XM125 Radar Module Monitor - Test and monitor Acconeer XM125 radar sensors",
-    long_about = "XM125 Radar Module Monitor
+    about = "XM125 Radar Module Monitor v1.7.0 - Production CLI for Acconeer XM125 radar modules",
+    long_about = "XM125 Radar Module Monitor v1.7.0
 
-A comprehensive tool for testing and monitoring Acconeer XM125 radar modules via I2C.
-Supports both distance detection and presence detection modes with real-time monitoring.
+Production-ready CLI tool for Acconeer XM125 radar modules with automatic firmware 
+management and comprehensive configuration options.
 
-TECHNICIAN QUICK START:
-  1. Check device status:        ./xm125-radar-monitor status
-  2. Get firmware info:          ./xm125-radar-monitor info  
-  3. Test presence detection:    ./xm125-radar-monitor presence
-  4. Continuous monitoring:      ./xm125-radar-monitor monitor --count 10
-  5. Save data to CSV:           ./xm125-radar-monitor monitor --save-to data.csv
+QUICK START:
+  1. Check device status:        xm125-radar-monitor status
+  2. Basic presence detection:   xm125-radar-monitor presence
+  3. Custom range/sensitivity:   xm125-radar-monitor presence --presence-range long --sensitivity 2.0
+  4. Continuous monitoring:      xm125-radar-monitor monitor --count 100 --save-to data.csv
+  5. Firmware management:        xm125-radar-monitor firmware check
 
-COMMON EXAMPLES:
-  # Check device status (shows actual firmware mode)
-  xm125-radar-monitor status
-
-  # Test presence detection (default mode)
+PRESENCE DETECTION EXAMPLES:
+  # Basic presence detection
   xm125-radar-monitor presence
 
-  # Test presence with long range preset
+  # Long range room occupancy detection
   xm125-radar-monitor presence --presence-range long
 
-  # Test presence with custom range and sensitivity
-  xm125-radar-monitor presence --min-range 0.3 --max-range 5.0 --sensitivity 1.5
+  # High sensitivity close proximity detection
+  xm125-radar-monitor presence --presence-range short --sensitivity 2.5
 
-  # Test presence with high sensitivity and fast frame rate
-  xm125-radar-monitor presence --presence-range medium --sensitivity 2.0 --frame-rate 20.0
+  # Custom range with balanced settings
+  xm125-radar-monitor presence --min-range 0.3 --max-range 5.0 --sensitivity 1.2
 
-  # Test distance measurement  
-  xm125-radar-monitor --mode distance measure
+  # Power-efficient monitoring
+  xm125-radar-monitor presence --presence-range long --frame-rate 5.0
 
-  # Continuous presence monitoring (10 samples, 500ms interval)
-  xm125-radar-monitor monitor --count 10 --interval 500
+FIRMWARE & HARDWARE:
+  # Check device status and firmware
+  xm125-radar-monitor status
 
-  # Put module into bootloader mode for firmware programming
-  xm125-radar-monitor bootloader
+  # Update to presence detector firmware
+  xm125-radar-monitor firmware update presence
 
-  # Erase chip completely (requires confirmation)
-  xm125-radar-monitor firmware erase --confirm
-
-  # Calculate firmware checksums for verification
-  xm125-radar-monitor firmware checksum --verbose
-
-  # Use custom I2C bus and address
-  xm125-radar-monitor -b 1 -a 0x53 status
-
-  # Use custom GPIO pins for different hardware
-  xm125-radar-monitor --gpio-reset 100 --gpio-boot 101 --gpio-wake 102 --gpio-mcu-int 103 status
-
-  # Test GPIO functionality without external scripts
+  # Initialize GPIO control
   xm125-radar-monitor gpio init
 
-  # Debug all register settings after configuration (for evaluation tool comparison)
-  xm125-radar-monitor --debug-registers --mode presence presence
+  # Reset to bootloader mode
+  xm125-radar-monitor gpio reset-bootloader
 
-  # Enable debug logging for troubleshooting
-  xm125-radar-monitor --verbose --mode presence presence
+MONITORING & DEBUGGING:
+  # Continuous monitoring with CSV output
+  xm125-radar-monitor monitor --count 100 --save-to data.csv
 
-  # Save measurements to CSV file
-  xm125-radar-monitor --mode presence monitor --save-to presence_data.csv
+  # Debug register configuration
+  xm125-radar-monitor --debug-registers presence --presence-range medium
+
+  # Verbose I2C transaction logging
+  xm125-radar-monitor --verbose presence
+
+ADVANCED CONFIGURATION:
+  # Custom I2C bus and address
+  xm125-radar-monitor -b 1 -a 0x53 status
+
+  # Custom GPIO pins for different hardware
+  xm125-radar-monitor --gpio-reset 100 --gpio-boot 101 status
 
 TROUBLESHOOTING:
   - If device not found: Check I2C bus/address with 'i2cdetect -y 2'
