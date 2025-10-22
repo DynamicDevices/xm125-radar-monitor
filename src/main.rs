@@ -28,7 +28,7 @@ mod gpio;
 mod i2c;
 mod radar;
 
-use cli::{Cli, FirmwareAction, GpioAction};
+use cli::{Cli, FirmwareAction, GpioAction, PresenceRange};
 use device_manager::DeviceManager;
 use error::RadarError;
 use firmware::FirmwareManager;
@@ -407,7 +407,23 @@ async fn execute_command(
         } => {
             monitor_measurements(radar, cli, interval, count).await?;
         }
-        Commands::Presence => {
+        Commands::Presence {
+            presence_range,
+            min_range,
+            max_range,
+            sensitivity,
+            frame_rate,
+        } => {
+            // Configure presence parameters if specified
+            configure_presence_parameters(
+                radar,
+                presence_range.as_ref(),
+                min_range,
+                max_range,
+                sensitivity,
+                frame_rate,
+            )?;
+
             let result = radar.measure_presence().await?;
             let response = format!(
                 "Presence: {}, Distance: {:.2}m, Intra: {:.2}, Inter: {:.2}",
@@ -764,6 +780,87 @@ fn output_response(
                 response.replace('"', "\"\"")
             );
         }
+    }
+
+    Ok(())
+}
+
+/// Configure presence parameters for the radar
+fn configure_presence_parameters(
+    radar: &mut radar::XM125Radar,
+    presence_range: Option<&PresenceRange>,
+    min_range: Option<f32>,
+    max_range: Option<f32>,
+    sensitivity: Option<f32>,
+    frame_rate: Option<f32>,
+) -> Result<(), RadarError> {
+    let mut config_changed = false;
+
+    // Configure range (either preset or custom)
+    if let Some(range) = presence_range {
+        info!("🎯 Configuring presence range preset: {range:?}");
+        radar.config.presence_range = range.clone().into();
+        config_changed = true;
+    } else if let (Some(min), Some(max)) = (min_range, max_range) {
+        info!("🎯 Configuring custom presence range: {min:.2}m - {max:.2}m");
+
+        // Validate range
+        if min >= max {
+            return Err(RadarError::DeviceError {
+                message: format!(
+                    "Minimum range ({min:.2}m) must be less than maximum range ({max:.2}m)"
+                ),
+            });
+        }
+
+        if !(0.06..=7.0).contains(&min) || !(0.06..=7.0).contains(&max) {
+            return Err(RadarError::DeviceError {
+                message: format!(
+                    "Range must be between 0.06m and 7.0m (got {min:.2}m - {max:.2}m)"
+                ),
+            });
+        }
+
+        // Update radar configuration with custom range
+        radar.config.start_m = min;
+        radar.config.length_m = max - min;
+        config_changed = true;
+    }
+
+    // Configure sensitivity
+    if let Some(sens) = sensitivity {
+        info!("🎯 Configuring sensitivity: {sens:.2}");
+
+        if !(0.1..=5.0).contains(&sens) {
+            return Err(RadarError::DeviceError {
+                message: format!("Sensitivity must be between 0.1 and 5.0 (got {sens:.2})"),
+            });
+        }
+
+        radar.config.threshold_sensitivity = sens;
+        radar.config.intra_detection_threshold = sens * 1000.0; // Convert to internal units
+        radar.config.inter_detection_threshold = sens * 800.0; // Slightly lower for inter
+        config_changed = true;
+    }
+
+    // Configure frame rate
+    if let Some(rate) = frame_rate {
+        info!("🎯 Configuring frame rate: {rate:.1} Hz");
+
+        if !(1.0..=60.0).contains(&rate) {
+            return Err(RadarError::DeviceError {
+                message: format!("Frame rate must be between 1.0 and 60.0 Hz (got {rate:.1})"),
+            });
+        }
+
+        radar.config.frame_rate = rate;
+        config_changed = true;
+    }
+
+    // Apply configuration to hardware if anything changed
+    if config_changed {
+        radar.configure_presence_range();
+        info!("✅ Presence parameters configured successfully");
     }
 
     Ok(())
