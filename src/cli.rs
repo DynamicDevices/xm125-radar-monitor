@@ -57,6 +57,15 @@ COMMON EXAMPLES:
   # Test presence detection (default mode)
   xm125-radar-monitor presence
 
+  # Test presence with long range preset
+  xm125-radar-monitor presence --presence-range long
+
+  # Test presence with custom range and sensitivity
+  xm125-radar-monitor presence --min-range 0.3 --max-range 5.0 --sensitivity 1.5
+
+  # Test presence with high sensitivity and fast frame rate
+  xm125-radar-monitor presence --presence-range medium --sensitivity 2.0 --frame-rate 20.0
+
   # Test distance measurement  
   xm125-radar-monitor --mode distance measure
 
@@ -267,7 +276,47 @@ pub enum Commands {
     /// Takes one presence reading showing detection status, distance to detected object,
     /// and motion scores (intra=fast motion, inter=slow motion). Device must be in
     /// presence detector mode.
-    Presence,
+    Presence {
+        /// Presence detection range preset
+        #[arg(
+            long,
+            help = "Detection range: short (6-70cm), medium (20cm-2m), long (50cm-7m)",
+            conflicts_with_all = ["min_range", "max_range"]
+        )]
+        presence_range: Option<PresenceRange>,
+
+        /// Minimum detection range in meters (custom range)
+        #[arg(
+            long,
+            help = "Minimum detection distance in meters (e.g., 0.3 for 30cm)",
+            conflicts_with = "presence_range",
+            requires = "max_range"
+        )]
+        min_range: Option<f32>,
+
+        /// Maximum detection range in meters (custom range)
+        #[arg(
+            long,
+            help = "Maximum detection distance in meters (e.g., 5.0 for 5m)",
+            conflicts_with = "presence_range",
+            requires = "min_range"
+        )]
+        max_range: Option<f32>,
+
+        /// Detection sensitivity threshold (0.1 = low, 0.5 = medium, 2.0 = high)
+        #[arg(
+            long,
+            help = "Detection sensitivity: lower = less sensitive, higher = more sensitive"
+        )]
+        sensitivity: Option<f32>,
+
+        /// Frame rate for presence detection in Hz
+        #[arg(
+            long,
+            help = "Measurement frequency in Hz (e.g., 12.0 for 12 measurements/second)"
+        )]
+        frame_rate: Option<f32>,
+    },
 
     /// Perform combined distance and presence measurement (requires --mode combined)
     ///
@@ -474,6 +523,16 @@ impl From<crate::cli::DetectorMode> for firmware::FirmwareType {
             DetectorMode::Distance => firmware::FirmwareType::Distance,
             DetectorMode::Presence | DetectorMode::Combined => firmware::FirmwareType::Presence, // Default to presence for combined
             DetectorMode::Breathing => firmware::FirmwareType::Breathing,
+        }
+    }
+}
+
+impl From<PresenceRange> for crate::radar::PresenceRange {
+    fn from(cli_range: PresenceRange) -> Self {
+        match cli_range {
+            PresenceRange::Short => crate::radar::PresenceRange::Short,
+            PresenceRange::Medium => crate::radar::PresenceRange::Medium,
+            PresenceRange::Long => crate::radar::PresenceRange::Long,
         }
     }
 }

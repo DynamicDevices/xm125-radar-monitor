@@ -420,7 +420,7 @@ impl Default for XM125Config {
 
 pub struct XM125Radar {
     i2c: I2cDevice,
-    config: XM125Config,
+    pub config: XM125Config,
     is_connected: bool,
     is_calibrated: bool,
     last_calibration: Option<Instant>,
@@ -1190,7 +1190,7 @@ impl XM125Radar {
 
     /// Configure presence detection range parameters
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // Range values are always positive and within u32 range
-    fn configure_presence_range(&mut self) {
+    pub fn configure_presence_range(&mut self) {
         let (start, end) = match self.config.presence_range {
             PresenceRange::Short => (0.06, 0.7),
             PresenceRange::Medium => (0.2, 2.0),

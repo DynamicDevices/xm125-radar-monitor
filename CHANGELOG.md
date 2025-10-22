@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.7.0] - 2025-01-22
+
+### Added
+- **Enhanced Presence Command Options**: Added comprehensive configuration options to the `presence` command
+  - `--presence-range <short|medium|long>`: Preset range configurations (6-70cm, 20cm-2m, 50cm-7m)
+  - `--min-range <meters>` and `--max-range <meters>`: Custom range configuration with validation
+  - `--sensitivity <value>`: Detection sensitivity control (0.1-5.0)
+  - `--frame-rate <hz>`: Measurement frequency control (1.0-60.0 Hz)
+- **Smart Argument Validation**: Preset ranges conflict with custom ranges, min/max ranges require both values
+- **Enhanced CLI Help**: Updated examples showing new presence configuration options
+- **Type Conversion**: Added automatic conversion between CLI and radar PresenceRange types
+
+### Fixed
+- **Missing CLI Options**: Resolved discrepancy between README documentation and actual CLI implementation
+- **Configuration Access**: Made radar config field public and presence configuration method accessible
+
+### Changed
+- **Improved User Experience**: Users can now configure presence detection directly without using the separate `config` subcommand
+- **Better Parameter Validation**: Range and sensitivity values are validated with helpful error messages
+
 ## [1.5.1] - 2025-10-16
 
 ### Firmware Update Bootloader Mode Fix
