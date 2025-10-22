@@ -7,35 +7,39 @@
 
 Production-ready CLI tool for Acconeer XM125 radar modules with automatic firmware management and comprehensive configuration options.
 
-**Version**: 1.7.1  
+**Version**: 2.0.0  
 **Maintainer**: Alex J Lennon (ajlennon@dynamicdevices.co.uk)  
 **Copyright**: © 2025 Dynamic Devices Ltd. All rights reserved.
 
 ## Features
 
-- **Multi-mode Detection**: Distance, presence, and breathing detection
+- **Measurement-Centric CLI**: Clean, intuitive commands for distance and presence detection
+- **Advanced Testing Framework**: Range, angle, and false positive analysis with signal strength indicators
 - **Automatic Firmware Management**: Auto-detects and updates firmware via `stm32flash`
-- **Comprehensive Configuration**: Direct parameter control for presence detection
-- **Continuous Monitoring**: Unified single/continuous operation with CSV export
+- **Comprehensive Configuration**: Direct parameter control with custom ranges and sensitivity
+- **Enhanced Monitoring**: Continuous operation with detailed CSV export and confidence analysis
 - **Internal GPIO Control**: Hardware reset and bootloader control without external scripts
-- **I2C Communication**: Direct hardware interface with robust error handling
-- **Register Debugging**: Complete register dumps for evaluation tool comparison
+- **Register-Level Debugging**: Complete register dumps with descriptions for optimization
 - **Cross-compilation**: Native ARM64 builds for embedded targets
 
 ## Quick Start
 
 ```bash
-# Check device status
+# Check device status and information
 sudo xm125-radar-monitor status
+sudo xm125-radar-monitor info
 
 # Basic presence detection (single measurement, default long range)
-sudo xm125-radar-monitor presence
+sudo xm125-radar-monitor presence --range long
+
+# Distance measurement with custom range
+sudo xm125-radar-monitor distance --min-range 0.2 --max-range 3.0
 
 # Continuous monitoring with custom range and register debug
 sudo xm125-radar-monitor --debug-registers presence --min-range 0.3 --max-range 5.0 --continuous --count 100 --interval 500
 
 # Infinite monitoring with CSV export
-sudo xm125-radar-monitor presence --presence-range long --continuous --save-to occupancy.csv
+sudo xm125-radar-monitor presence --range long --continuous --save-to occupancy.csv
 ```
 
 ## Hardware Requirements
@@ -45,21 +49,39 @@ sudo xm125-radar-monitor presence --presence-range long --continuous --save-to o
 - **GPIO**: 124 (reset), 125 (interrupt), 139 (wake), 141 (boot)
 - **Firmware**: `/lib/firmware/acconeer/*.bin`
 
-## Presence Detection Configuration
+## Command Structure
 
-### Range Options
+### Core Commands
+
+```bash
+# Device information and status
+sudo xm125-radar-monitor status          # Connection and firmware status
+sudo xm125-radar-monitor info            # Detailed device information
+
+# Measurement commands
+sudo xm125-radar-monitor distance        # Distance measurement mode
+sudo xm125-radar-monitor presence        # Presence detection mode
+
+# Hardware and firmware management
+sudo xm125-radar-monitor firmware        # Firmware operations (check, update, verify, erase)
+sudo xm125-radar-monitor gpio            # GPIO control (init, status, reset, test)
+```
+
+### Presence Detection Configuration
+
+#### Range Options
 
 ```bash
 # Preset ranges (default: long)
---presence-range short    # 6cm - 70cm (close proximity)
---presence-range medium   # 20cm - 2m (balanced)
---presence-range long     # 50cm - 7m (room occupancy, default)
+--range short    # 6cm - 70cm (close proximity)
+--range medium   # 20cm - 2m (balanced)
+--range long     # 50cm - 7m (room occupancy, default)
 
 # Custom ranges (both required, conflicts with presets)
 --min-range 0.3 --max-range 5.0   # Custom 30cm - 5m range
 ```
 
-### Detection Parameters
+#### Detection Parameters
 
 ```bash
 # Sensitivity control (0.1 = low, 5.0 = high)
@@ -69,7 +91,7 @@ sudo xm125-radar-monitor presence --presence-range long --continuous --save-to o
 --frame-rate 20.0
 ```
 
-### Continuous Monitoring
+#### Continuous Monitoring
 
 ```bash
 # Enable continuous mode
