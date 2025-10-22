@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.7.2] - 2025-10-22
+
+### Fixed
+- **Register Debugging**: Fixed `--debug-registers` flag not displaying output in both single and continuous presence modes
+- **Diagnostic Logging**: Added explicit connection status logging and error reporting for register debugging
+- **Error Handling**: Improved error visibility with `eprintln!` for immediate feedback when register debugging fails
+
+### Technical Improvements
+- Enhanced debug diagnostics to show radar connection status when `--debug-registers` is requested
+- Added success/failure confirmation for register debugging operations
+- Improved error reporting for troubleshooting register access issues
+
 ## [1.7.1] - 2025-01-22
 
 ### Added
