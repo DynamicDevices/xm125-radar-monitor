@@ -803,6 +803,13 @@ async fn monitor_presence_continuous(
 ) -> Result<(), RadarError> {
     use tokio::time::{sleep, Duration};
 
+    // Debug registers if requested (after configuration is applied)
+    if cli.debug_registers && radar.is_connected() {
+        if let Err(e) = radar.debug_registers("Presence") {
+            warn!("Failed to debug registers: {e}");
+        }
+    }
+
     let mut csv_writer = if let Some(filename) = save_to {
         let file = std::fs::File::create(filename).map_err(|e| RadarError::DeviceError {
             message: format!("Failed to create CSV file '{filename}': {e}"),
