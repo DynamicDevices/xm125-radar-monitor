@@ -420,7 +420,7 @@
 <a href=#420 id=420 data-nosnippet>420</a>
 <a href=#421 id=421 data-nosnippet>421</a><span class="kw">pub struct </span>XM125Radar {
 <a href=#422 id=422 data-nosnippet>422</a>    i2c: I2cDevice,
-<a href=#423 id=423 data-nosnippet>423</a>    config: XM125Config,
+<a href=#423 id=423 data-nosnippet>423</a>    <span class="kw">pub </span>config: XM125Config,
 <a href=#424 id=424 data-nosnippet>424</a>    is_connected: bool,
 <a href=#425 id=425 data-nosnippet>425</a>    is_calibrated: bool,
 <a href=#426 id=426 data-nosnippet>426</a>    last_calibration: <span class="prelude-ty">Option</span>&lt;Instant&gt;,
@@ -1190,7 +1190,7 @@
 <a href=#1190 id=1190 data-nosnippet>1190</a>
 <a href=#1191 id=1191 data-nosnippet>1191</a>    <span class="doccomment">/// Configure presence detection range parameters
 <a href=#1192 id=1192 data-nosnippet>1192</a>    </span><span class="attr">#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] </span><span class="comment">// Range values are always positive and within u32 range
-<a href=#1193 id=1193 data-nosnippet>1193</a>    </span><span class="kw">fn </span>configure_presence_range(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+<a href=#1193 id=1193 data-nosnippet>1193</a>    </span><span class="kw">pub fn </span>configure_presence_range(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
 <a href=#1194 id=1194 data-nosnippet>1194</a>        <span class="kw">let </span>(start, end) = <span class="kw">match </span><span class="self">self</span>.config.presence_range {
 <a href=#1195 id=1195 data-nosnippet>1195</a>            PresenceRange::Short =&gt; (<span class="number">0.06</span>, <span class="number">0.7</span>),
 <a href=#1196 id=1196 data-nosnippet>1196</a>            PresenceRange::Medium =&gt; (<span class="number">0.2</span>, <span class="number">2.0</span>),
