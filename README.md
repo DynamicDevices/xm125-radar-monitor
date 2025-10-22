@@ -215,6 +215,9 @@ sudo ./xm125-radar-monitor --gpio-reset 100 --gpio-boot 101 --gpio-wake 102 --gp
 
 # GPIO control without external scripts
 sudo ./xm125-radar-monitor gpio init
+
+# Debug all register settings after configuration (for evaluation tool comparison)
+sudo ./xm125-radar-monitor --debug-registers --mode presence presence
 ```
 
 ### **GPIO Control Commands**
@@ -249,6 +252,52 @@ sudo ./xm125-radar-monitor gpio test
 - Automatic Foundries.io SPI conflict resolution for GPIO141
 - Proper STM32 reset timing sequences (10ms assert, 100ms startup)
 - Comprehensive error handling and status reporting
+
+### **Register Debugging**
+
+For comparison with other evaluation tools, the `--debug-registers` option logs all module register settings after configuration:
+
+```bash
+# Debug presence detector registers
+sudo ./xm125-radar-monitor --debug-registers --mode presence presence
+
+# Debug distance detector registers  
+sudo ./xm125-radar-monitor --debug-registers --mode distance measure
+
+# Debug breathing detector registers
+sudo ./xm125-radar-monitor --debug-registers --mode breathing breathing
+```
+
+**Example Register Debug Output:**
+```
+================================================================================
+XM125 Register Dump - Presence Mode
+================================================================================
+
+📊 Common Status & Control Registers:
+────────────────────────────────────────────────────────────────────────────────
+  Addr   (Dec) │ Register Name             │ Value (Hex)  (Decimal) │ Description
+────────────────────────────────────────────────────────────────────────────────
+  0x0000 (  0) │ Module Version            │ 0x00010203 (     66051) │ Hardware/firmware version info
+  0x0001 (  1) │ Protocol Status           │ 0x000000FF (        255) │ Communication protocol status
+  0x0002 (  2) │ Measure Counter           │ 0x00000012 (         18) │ Number of measurements performed
+  0x0003 (  3) │ Detector Status           │ 0x000000FF (        255) │ Current detector state and flags
+
+👤 Presence Detector Configuration:
+────────────────────────────────────────────────────────────────────────────────
+  0x0040 ( 64) │ Start Range               │ 0x000001F4 (        500) │ Presence detection start distance (mm)
+  0x0041 ( 65) │ End Range                 │ 0x00001B58 (       7000) │ Presence detection end distance (mm)
+  0x0042 ( 66) │ Intra Threshold           │ 0x00000514 (       1300) │ Fast motion detection threshold
+  0x0043 ( 67) │ Inter Threshold           │ 0x000003E8 (       1000) │ Slow motion detection threshold
+  0x0044 ( 68) │ Frame Rate                │ 0x00002EE0 (      12000) │ Measurement frequency (mHz)
+================================================================================
+```
+
+This output is ideal for:
+- **Verification**: Compare settings with Acconeer evaluation tools
+- **Debugging**: Identify configuration mismatches
+- **Documentation**: Record exact register values for reproducible setups
+- **Development**: Validate parameter mapping from CLI to hardware registers
 
 ## Output Formats
 

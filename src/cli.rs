@@ -81,6 +81,9 @@ COMMON EXAMPLES:
   # Test GPIO functionality without external scripts
   xm125-radar-monitor gpio init
 
+  # Debug all register settings after configuration (for evaluation tool comparison)
+  xm125-radar-monitor --debug-registers --mode presence presence
+
   # Enable debug logging for troubleshooting
   xm125-radar-monitor --verbose --mode presence presence
 
@@ -120,6 +123,13 @@ pub struct Cli {
     /// Enable verbose debug logging (shows I2C transactions and internal state)
     #[arg(short, long)]
     pub verbose: bool,
+
+    /// Enable register debugging (logs all module register settings after configuration)
+    #[arg(
+        long,
+        help = "Log all register values after configuration for comparison with evaluation tools"
+    )]
+    pub debug_registers: bool,
 
     /// Suppress startup banner and configuration info
     #[arg(short, long)]

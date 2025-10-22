@@ -497,6 +497,20 @@ async fn execute_command(
         }
     }
 
+    // If register debugging is enabled, dump all registers after command execution
+    if cli.debug_registers && radar.is_connected() {
+        let detector_mode = match cli.mode {
+            cli::DetectorMode::Distance => "Distance",
+            cli::DetectorMode::Presence => "Presence",
+            cli::DetectorMode::Breathing => "Breathing",
+            cli::DetectorMode::Combined => "Combined",
+        };
+
+        if let Err(e) = radar.debug_registers(detector_mode) {
+            warn!("Failed to debug registers: {e}");
+        }
+    }
+
     Ok(())
 }
 

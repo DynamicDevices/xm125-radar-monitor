@@ -1772,4 +1772,387 @@ impl XM125Radar {
 
         Ok(())
     }
+
+    /// Debug all module registers after configuration
+    pub fn debug_registers(&mut self, detector_mode: &str) -> Result<()> {
+        info!(
+            "🔍 Register Debug - {} Detector Configuration",
+            detector_mode
+        );
+        println!(
+            "================================================================================"
+        );
+        println!("XM125 Register Dump - {} Mode", detector_mode);
+        println!(
+            "================================================================================"
+        );
+
+        // Common registers for all modes
+        self.debug_common_registers()?;
+
+        // Mode-specific registers
+        match detector_mode.to_lowercase().as_str() {
+            "distance" => self.debug_distance_registers()?,
+            "presence" => self.debug_presence_registers()?,
+            "breathing" => self.debug_breathing_registers()?,
+            _ => warn!(
+                "Unknown detector mode for register debug: {}",
+                detector_mode
+            ),
+        }
+
+        println!(
+            "================================================================================"
+        );
+        Ok(())
+    }
+
+    /// Debug common registers used by all detector modes
+    fn debug_common_registers(&mut self) -> Result<()> {
+        println!("\n📊 Common Status & Control Registers:");
+        println!(
+            "────────────────────────────────────────────────────────────────────────────────"
+        );
+        println!(
+            "  Addr   (Dec) │ Register Name             │ Value (Hex)  (Decimal) │ Description"
+        );
+        println!(
+            "────────────────────────────────────────────────────────────────────────────────"
+        );
+
+        // Status registers
+        self.debug_register(
+            REG_VERSION,
+            "Module Version",
+            "Hardware/firmware version info",
+        )?;
+        self.debug_register(
+            REG_PROTOCOL_STATUS,
+            "Protocol Status",
+            "Communication protocol status",
+        )?;
+        self.debug_register(
+            REG_MEASURE_COUNTER,
+            "Measure Counter",
+            "Number of measurements performed",
+        )?;
+        self.debug_register(
+            REG_DETECTOR_STATUS,
+            "Detector Status",
+            "Current detector state and flags",
+        )?;
+
+        // Command register (read-only, shows last command)
+        self.debug_register(
+            REG_COMMAND,
+            "Command Register",
+            "Last executed command code",
+        )?;
+
+        Ok(())
+    }
+
+    /// Debug distance detector specific registers
+    fn debug_distance_registers(&mut self) -> Result<()> {
+        println!("\n📏 Distance Detector Configuration:");
+        println!(
+            "────────────────────────────────────────────────────────────────────────────────"
+        );
+        println!(
+            "  Addr   (Dec) │ Register Name             │ Value (Hex)  (Decimal) │ Description"
+        );
+        println!(
+            "────────────────────────────────────────────────────────────────────────────────"
+        );
+
+        // Configuration registers
+        self.debug_register(
+            REG_START_CONFIG,
+            "Start Range",
+            "Detection start distance (mm)",
+        )?;
+        self.debug_register(REG_END_CONFIG, "End Range", "Detection end distance (mm)")?;
+        self.debug_register(
+            REG_MAX_STEP_LENGTH,
+            "Max Step Length",
+            "Maximum step length for range bins",
+        )?;
+        self.debug_register(
+            REG_CLOSE_RANGE_LEAKAGE_CANCELLATION,
+            "Leakage Cancellation",
+            "Close range leakage cancellation",
+        )?;
+        self.debug_register(
+            REG_SIGNAL_QUALITY,
+            "Signal Quality",
+            "Signal quality threshold",
+        )?;
+        self.debug_register(REG_MAX_PROFILE, "Max Profile", "Maximum profile setting")?;
+        self.debug_register(
+            REG_THRESHOLD_METHOD,
+            "Threshold Method",
+            "Detection threshold method",
+        )?;
+        self.debug_register(REG_PEAK_SORTING, "Peak Sorting", "Peak sorting algorithm")?;
+        self.debug_register(
+            REG_NUM_FRAMES_RECORDED_THRESHOLD,
+            "Frames Threshold",
+            "Number of frames for threshold",
+        )?;
+        self.debug_register(
+            REG_FIXED_AMPLITUDE_THRESHOLD_VALUE,
+            "Fixed Amplitude Threshold",
+            "Fixed amplitude threshold value",
+        )?;
+        self.debug_register(
+            REG_THRESHOLD_SENSITIVITY,
+            "Threshold Sensitivity",
+            "Detection sensitivity setting",
+        )?;
+        self.debug_register(
+            REG_REFLECTOR_SHAPE,
+            "Reflector Shape",
+            "Expected reflector shape",
+        )?;
+        self.debug_register(
+            REG_FIXED_STRENGTH_THRESHOLD_VALUE,
+            "Fixed Strength Threshold",
+            "Fixed strength threshold value",
+        )?;
+
+        println!("\n📊 Distance Detector Results:");
+        println!(
+            "────────────────────────────────────────────────────────────────────────────────"
+        );
+        println!(
+            "  Addr   (Dec) │ Register Name             │ Value (Hex)  (Decimal) │ Description"
+        );
+        println!(
+            "────────────────────────────────────────────────────────────────────────────────"
+        );
+
+        // Result registers
+        self.debug_register(
+            REG_DISTANCE_RESULT,
+            "Distance Result",
+            "Measured distance (mm)",
+        )?;
+        self.debug_register(
+            REG_PEAK0_DISTANCE,
+            "Peak 0 Distance",
+            "First peak distance (mm)",
+        )?;
+        self.debug_register(
+            REG_PEAK0_STRENGTH,
+            "Peak 0 Strength",
+            "First peak signal strength",
+        )?;
+
+        Ok(())
+    }
+
+    /// Debug presence detector specific registers
+    fn debug_presence_registers(&mut self) -> Result<()> {
+        println!("\n👤 Presence Detector Configuration:");
+        println!(
+            "────────────────────────────────────────────────────────────────────────────────"
+        );
+        println!(
+            "  Addr   (Dec) │ Register Name             │ Value (Hex)  (Decimal) │ Description"
+        );
+        println!(
+            "────────────────────────────────────────────────────────────────────────────────"
+        );
+
+        // Configuration registers (estimated addresses)
+        self.debug_register(
+            REG_PRESENCE_START,
+            "Start Range",
+            "Presence detection start distance (mm)",
+        )?;
+        self.debug_register(
+            REG_PRESENCE_END,
+            "End Range",
+            "Presence detection end distance (mm)",
+        )?;
+        self.debug_register(
+            REG_INTRA_DETECTION_THRESHOLD,
+            "Intra Threshold",
+            "Fast motion detection threshold",
+        )?;
+        self.debug_register(
+            REG_INTER_DETECTION_THRESHOLD,
+            "Inter Threshold",
+            "Slow motion detection threshold",
+        )?;
+        self.debug_register(REG_FRAME_RATE, "Frame Rate", "Measurement frequency (mHz)")?;
+
+        println!("\n📊 Presence Detector Results:");
+        println!(
+            "────────────────────────────────────────────────────────────────────────────────"
+        );
+        println!(
+            "  Addr   (Dec) │ Register Name             │ Value (Hex)  (Decimal) │ Description"
+        );
+        println!(
+            "────────────────────────────────────────────────────────────────────────────────"
+        );
+
+        // Result registers
+        self.debug_register(
+            REG_PRESENCE_RESULT,
+            "Presence Result",
+            "Presence detection flag (0/1)",
+        )?;
+        self.debug_register(
+            REG_PRESENCE_DISTANCE,
+            "Presence Distance",
+            "Distance to detected presence (mm)",
+        )?;
+        self.debug_register(
+            REG_INTRA_PRESENCE_SCORE,
+            "Intra Score",
+            "Fast motion detection score",
+        )?;
+        self.debug_register(
+            REG_INTER_PRESENCE_SCORE,
+            "Inter Score",
+            "Slow motion detection score",
+        )?;
+
+        Ok(())
+    }
+
+    /// Debug breathing detector specific registers
+    fn debug_breathing_registers(&mut self) -> Result<()> {
+        println!("\n🫁 Breathing Detector Configuration:");
+        println!(
+            "────────────────────────────────────────────────────────────────────────────────"
+        );
+        println!(
+            "  Addr   (Dec) │ Register Name             │ Value (Hex)  (Decimal) │ Description"
+        );
+        println!(
+            "────────────────────────────────────────────────────────────────────────────────"
+        );
+
+        // Configuration registers
+        self.debug_register(
+            REG_BREATHING_START,
+            "Start Range",
+            "Breathing detection start distance (mm)",
+        )?;
+        self.debug_register(
+            REG_BREATHING_END,
+            "End Range",
+            "Breathing detection end distance (mm)",
+        )?;
+        self.debug_register(
+            REG_BREATHING_NUM_DISTANCES_TO_ANALYZE,
+            "Num Distances",
+            "Number of distances to analyze",
+        )?;
+        self.debug_register(
+            REG_BREATHING_DISTANCE_DETERMINATION_DURATION_S,
+            "Distance Duration",
+            "Distance determination duration (s)",
+        )?;
+        self.debug_register(
+            REG_BREATHING_USE_PRESENCE_PROCESSOR,
+            "Use Presence",
+            "Use presence processor flag",
+        )?;
+        self.debug_register(
+            REG_BREATHING_LOWEST_BREATHING_RATE,
+            "Min Breathing Rate",
+            "Lowest detectable breathing rate (BPM)",
+        )?;
+        self.debug_register(
+            REG_BREATHING_HIGHEST_BREATHING_RATE,
+            "Max Breathing Rate",
+            "Highest detectable breathing rate (BPM)",
+        )?;
+        self.debug_register(
+            REG_BREATHING_TIME_SERIES_LENGTH_S,
+            "Time Series Length",
+            "Time series analysis length (s)",
+        )?;
+        self.debug_register(
+            REG_BREATHING_FRAME_RATE,
+            "Frame Rate",
+            "Measurement frequency (mHz)",
+        )?;
+        self.debug_register(
+            REG_BREATHING_SWEEPS_PER_FRAME,
+            "Sweeps per Frame",
+            "Number of sweeps per measurement frame",
+        )?;
+        self.debug_register(
+            REG_BREATHING_HWAAS,
+            "HWAAS",
+            "Hardware Accelerated Average Sampling",
+        )?;
+        self.debug_register(REG_BREATHING_PROFILE, "Profile", "Radar profile setting")?;
+        self.debug_register(
+            REG_BREATHING_INTRA_DETECTION_THRESHOLD,
+            "Intra Threshold",
+            "Intra-frame detection threshold",
+        )?;
+
+        println!("\n📊 Breathing Detector Results:");
+        println!(
+            "────────────────────────────────────────────────────────────────────────────────"
+        );
+        println!(
+            "  Addr   (Dec) │ Register Name             │ Value (Hex)  (Decimal) │ Description"
+        );
+        println!(
+            "────────────────────────────────────────────────────────────────────────────────"
+        );
+
+        // Result registers
+        self.debug_register(
+            REG_BREATHING_RESULT,
+            "Breathing Result",
+            "Breathing detection result",
+        )?;
+        self.debug_register(
+            REG_BREATHING_RATE,
+            "Breathing Rate",
+            "Detected breathing rate (BPM)",
+        )?;
+        self.debug_register(
+            REG_BREATHING_APP_STATE,
+            "App State",
+            "Breathing application state",
+        )?;
+
+        Ok(())
+    }
+
+    /// Debug a single register with description
+    #[allow(clippy::unnecessary_wraps)]
+    fn debug_register(&mut self, reg_addr: u16, name: &str, description: &str) -> Result<()> {
+        match self.i2c.read_register(reg_addr, 4) {
+            Ok(value) => {
+                // Ensure we have exactly 4 bytes, pad with zeros if needed
+                let mut bytes = [0u8; 4];
+                for (i, &byte) in value.iter().take(4).enumerate() {
+                    bytes[i] = byte;
+                }
+                let value_u32 = u32::from_be_bytes(bytes);
+                println!(
+                    "  0x{:04X} ({:3}) │ {:25} │ 0x{:08X} ({:10}) │ {}",
+                    reg_addr, reg_addr, name, value_u32, value_u32, description
+                );
+            }
+            Err(_) => {
+                println!(
+                    "  0x{:04X} ({:3}) │ {:25} │ {:>10} ({:>10}) │ {}",
+                    reg_addr, reg_addr, name, "READ_ERR", "N/A", description
+                );
+            }
+        }
+        Ok(())
+    }
 }
