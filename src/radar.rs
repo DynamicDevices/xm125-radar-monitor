@@ -1191,10 +1191,20 @@ impl XM125Radar {
     /// Configure presence detection range parameters
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // Range values are always positive and within u32 range
     pub fn configure_presence_range(&mut self) {
-        let (start, end) = match self.config.presence_range {
-            PresenceRange::Short => (0.06, 0.7),
-            PresenceRange::Medium => (0.2, 2.0),
-            PresenceRange::Long => (0.5, 7.0),
+        // Check if custom range is set (start_m and length_m are used for custom ranges)
+        let (start, end) = if self.config.start_m > 0.0 && self.config.length_m > 0.0 {
+            // Use custom range from start_m and length_m
+            (
+                self.config.start_m,
+                self.config.start_m + self.config.length_m,
+            )
+        } else {
+            // Use preset range
+            match self.config.presence_range {
+                PresenceRange::Short => (0.06, 0.7),
+                PresenceRange::Medium => (0.2, 2.0),
+                PresenceRange::Long => (0.5, 7.0),
+            }
         };
 
         debug!("Configuring presence detection parameters:");
@@ -1216,32 +1226,63 @@ impl XM125Radar {
         let start_mm = (start * 1000.0) as u32;
         let end_mm = (end * 1000.0) as u32;
 
-        debug!("Writing presence range configuration (estimated registers):");
-        debug!("  Start range: {start_mm}mm -> register (not implemented)");
-        debug!("  End range: {end_mm}mm -> register (not implemented)");
+        debug!("Writing presence range configuration to hardware registers:");
+        debug!("  Start range: {start_mm}mm -> register 0x0052");
+        debug!("  End range: {end_mm}mm -> register 0x0053");
+
+        // Write range configuration to hardware registers
+        if let Err(e) = self.i2c.write_register(0x0052, &start_mm.to_be_bytes()) {
+            warn!("Failed to write start range register: {e}");
+        } else {
+            debug!("✅ Start range written successfully");
+        }
+
+        if let Err(e) = self.i2c.write_register(0x0053, &end_mm.to_be_bytes()) {
+            warn!("Failed to write end range register: {e}");
+        } else {
+            debug!("✅ End range written successfully");
+        }
 
         // Configure detection thresholds (convert to appropriate format)
         let intra_threshold = (self.config.intra_detection_threshold * 1000.0) as u32;
         let inter_threshold = (self.config.inter_detection_threshold * 1000.0) as u32;
 
-        debug!("  Intra threshold: {intra_threshold} -> register (not implemented)");
-        debug!("  Inter threshold: {inter_threshold} -> register (not implemented)");
+        debug!("  Intra threshold: {intra_threshold} -> register 0x0046");
+        debug!("  Inter threshold: {inter_threshold} -> register 0x0047");
 
-        // Configure frame rate (convert to appropriate format)
-        let frame_rate = (self.config.frame_rate * 1000.0) as u32; // Convert to milliHz or similar
-        debug!("  Frame rate: {frame_rate} -> register (not implemented)");
+        // Write threshold configuration to hardware registers
+        if let Err(e) = self
+            .i2c
+            .write_register(0x0046, &intra_threshold.to_be_bytes())
+        {
+            warn!("Failed to write intra threshold register: {e}");
+        } else {
+            debug!("✅ Intra threshold written successfully");
+        }
 
-        debug!(
-            "Presence configuration registers are not yet implemented - using firmware defaults"
-        );
-        debug!("Configuration parameters are logged but not written to device registers");
+        if let Err(e) = self
+            .i2c
+            .write_register(0x0047, &inter_threshold.to_be_bytes())
+        {
+            warn!("Failed to write inter threshold register: {e}");
+        } else {
+            debug!("✅ Inter threshold written successfully");
+        }
 
-        // TODO: Implement actual register writes when register addresses are confirmed:
-        // self.i2c.write_register(REG_PRESENCE_START, &start_mm.to_be_bytes())?;
-        // self.i2c.write_register(REG_PRESENCE_END, &end_mm.to_be_bytes())?;
-        // self.i2c.write_register(REG_INTRA_DETECTION_THRESHOLD, &intra_threshold.to_be_bytes())?;
-        // self.i2c.write_register(REG_INTER_DETECTION_THRESHOLD, &inter_threshold.to_be_bytes())?;
-        // self.i2c.write_register(REG_FRAME_RATE, &frame_rate.to_be_bytes())?;
+        // Configure frame rate (convert to milliHz)
+        let frame_rate_mhz = (self.config.frame_rate * 1000.0) as u32;
+        debug!("  Frame rate: {frame_rate_mhz}mHz -> register 0x0045");
+
+        if let Err(e) = self
+            .i2c
+            .write_register(0x0045, &frame_rate_mhz.to_be_bytes())
+        {
+            warn!("Failed to write frame rate register: {e}");
+        } else {
+            debug!("✅ Frame rate written successfully");
+        }
+
+        info!("✅ Presence range configuration written to hardware registers");
     }
 
     /// Write distance detector configuration registers

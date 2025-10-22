@@ -536,6 +536,7 @@ async fn monitor_distance_continuous(
 }
 
 /// Monitor presence detection continuously
+#[allow(clippy::too_many_lines)]
 async fn monitor_presence_continuous(
     radar: &mut radar::XM125Radar,
     cli: &Cli,
@@ -551,7 +552,7 @@ async fn monitor_presence_continuous(
         })?;
         let mut writer = csv::Writer::from_writer(file);
 
-        // Write CSV header
+        // Write enhanced CSV header for hardware testing
         writer
             .write_record([
                 "timestamp",
@@ -559,6 +560,10 @@ async fn monitor_presence_continuous(
                 "presence_distance_m",
                 "intra_score",
                 "inter_score",
+                "intra_strength",
+                "inter_strength",
+                "detection_confidence",
+                "measurement_number",
             ])
             .map_err(|e| RadarError::DeviceError {
                 message: format!("Failed to write CSV header: {e}"),
@@ -594,7 +599,7 @@ async fn monitor_presence_continuous(
             Ok(result) => {
                 measurement_count += 1;
 
-                // Display result
+                // Display result with enhanced testing information
                 if !cli.quiet {
                     let timestamp = Utc::now().format("%H:%M:%S%.3f").to_string();
                     let status = if result.presence_detected {
@@ -602,15 +607,75 @@ async fn monitor_presence_continuous(
                     } else {
                         "NOT DETECTED"
                     };
+
+                    // Calculate signal quality indicators for testing
+                    let intra_strength = if result.intra_presence_score > 2.0 {
+                        "STRONG"
+                    } else if result.intra_presence_score > 1.0 {
+                        "MEDIUM"
+                    } else if result.intra_presence_score > 0.5 {
+                        "WEAK"
+                    } else {
+                        "NONE"
+                    };
+
+                    let inter_strength = if result.inter_presence_score > 2.0 {
+                        "STRONG"
+                    } else if result.inter_presence_score > 1.0 {
+                        "MEDIUM"
+                    } else if result.inter_presence_score > 0.5 {
+                        "WEAK"
+                    } else {
+                        "NONE"
+                    };
+
+                    // Enhanced output for hardware testing
                     println!(
-                        "[{timestamp}] #{measurement_count:3} Presence: {status}, Distance: {:.2}m, Intra: {:.2}, Inter: {:.2}",
+                        "[{timestamp}] #{measurement_count:3} Presence: {status:>12} | Distance: {:.2}m | Fast: {:.2}({intra_strength:>6}) | Slow: {:.2}({inter_strength:>6})",
                         result.presence_distance, result.intra_presence_score, result.inter_presence_score
                     );
                 }
 
-                // Save to CSV if requested
+                // Save enhanced data to CSV if requested
                 if let Some(ref mut writer) = csv_writer {
                     let timestamp_full = Utc::now().format("%Y-%m-%d %H:%M:%S%.3f").to_string();
+
+                    // Calculate signal strength indicators for CSV
+                    let intra_strength = if result.intra_presence_score > 2.0 {
+                        "STRONG"
+                    } else if result.intra_presence_score > 1.0 {
+                        "MEDIUM"
+                    } else if result.intra_presence_score > 0.5 {
+                        "WEAK"
+                    } else {
+                        "NONE"
+                    };
+
+                    let inter_strength = if result.inter_presence_score > 2.0 {
+                        "STRONG"
+                    } else if result.inter_presence_score > 1.0 {
+                        "MEDIUM"
+                    } else if result.inter_presence_score > 0.5 {
+                        "WEAK"
+                    } else {
+                        "NONE"
+                    };
+
+                    // Calculate overall detection confidence
+                    let confidence = if result.presence_detected {
+                        let max_score =
+                            result.intra_presence_score.max(result.inter_presence_score);
+                        if max_score > 3.0 {
+                            "HIGH"
+                        } else if max_score > 1.5 {
+                            "MEDIUM"
+                        } else {
+                            "LOW"
+                        }
+                    } else {
+                        "NONE"
+                    };
+
                     writer
                         .write_record([
                             timestamp_full.as_str(),
@@ -618,6 +683,10 @@ async fn monitor_presence_continuous(
                             &result.presence_distance.to_string(),
                             &result.intra_presence_score.to_string(),
                             &result.inter_presence_score.to_string(),
+                            intra_strength,
+                            inter_strength,
+                            confidence,
+                            &measurement_count.to_string(),
                         ])
                         .map_err(|e| RadarError::DeviceError {
                             message: format!("Failed to write CSV record: {e}"),
