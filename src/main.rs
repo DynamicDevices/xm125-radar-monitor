@@ -429,9 +429,21 @@ async fn execute_command(
             )?;
 
             // Debug registers after configuration if requested
-            if cli.debug_registers && radar.is_connected() {
-                if let Err(e) = radar.debug_registers("Presence") {
-                    warn!("Failed to debug registers: {e}");
+            if cli.debug_registers {
+                info!(
+                    "🔍 Debug registers requested, radar connected: {}",
+                    radar.is_connected()
+                );
+                if radar.is_connected() {
+                    match radar.debug_registers("Presence") {
+                        Ok(()) => info!("✅ Register debugging completed successfully"),
+                        Err(e) => {
+                            eprintln!("❌ Failed to debug registers: {e}");
+                            warn!("Failed to debug registers: {e}");
+                        }
+                    }
+                } else {
+                    eprintln!("❌ Cannot debug registers: radar not connected");
                 }
             }
 
@@ -804,9 +816,21 @@ async fn monitor_presence_continuous(
     use tokio::time::{sleep, Duration};
 
     // Debug registers if requested (after configuration is applied)
-    if cli.debug_registers && radar.is_connected() {
-        if let Err(e) = radar.debug_registers("Presence") {
-            warn!("Failed to debug registers: {e}");
+    if cli.debug_registers {
+        info!(
+            "🔍 Debug registers requested for continuous monitoring, radar connected: {}",
+            radar.is_connected()
+        );
+        if radar.is_connected() {
+            match radar.debug_registers("Presence") {
+                Ok(()) => info!("✅ Register debugging completed successfully"),
+                Err(e) => {
+                    eprintln!("❌ Failed to debug registers: {e}");
+                    warn!("Failed to debug registers: {e}");
+                }
+            }
+        } else {
+            eprintln!("❌ Cannot debug registers: radar not connected");
         }
     }
 
