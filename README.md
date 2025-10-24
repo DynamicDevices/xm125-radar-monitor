@@ -7,7 +7,7 @@
 
 Production-ready CLI tool for Acconeer XM125 radar modules with verified 7m detection range and comprehensive configuration control.
 
-**Version**: 2.0.4  
+**Version**: 2.0.5  
 **Maintainer**: Alex J Lennon (ajlennon@dynamicdevices.co.uk)  
 **Copyright**: © 2025 Dynamic Devices Ltd. All rights reserved.
 
@@ -31,8 +31,9 @@ sudo xm125-radar-monitor status
 sudo xm125-radar-monitor info
 
 # Presence detection (verified 7m range capability)
-sudo xm125-radar-monitor presence --range long                    # 0.3m-5.5m preset
-sudo xm125-radar-monitor presence --min-range 0.5 --max-range 7.0 # Full 7m range
+sudo xm125-radar-monitor presence --range long                    # 0.3m-5.5m preset (auto profile)
+sudo xm125-radar-monitor presence --min-range 0.5 --max-range 7.0 # Full 7m range (auto profile)
+sudo xm125-radar-monitor presence --min-range 0.5 --max-range 7.0 --profile manual # 7m range (manual Profile 5)
 
 # Distance measurement
 sudo xm125-radar-monitor distance --min-range 0.2 --max-range 3.0
@@ -41,7 +42,7 @@ sudo xm125-radar-monitor distance --min-range 0.2 --max-range 3.0
 sudo xm125-radar-monitor presence --min-range 0.5 --max-range 7.0 --continuous --count 100 --save-to data.csv
 
 # Register debugging (verify configuration)
-sudo xm125-radar-monitor --debug-registers presence --min-range 0.5 --max-range 7.0
+sudo xm125-radar-monitor --debug-registers presence --min-range 0.5 --max-range 7.0 --profile manual
 ```
 
 ## Hardware Requirements
@@ -92,6 +93,16 @@ sudo xm125-radar-monitor gpio            # GPIO control (init, status, reset, te
 
 # Frame rate control (1.0 - 60.0 Hz)
 --frame-rate 20.0
+```
+
+#### Profile Mode Configuration
+
+```bash
+# Automatic profile selection (default, recommended)
+--profile auto      # Firmware selects optimal profile based on range
+
+# Manual profile selection (advanced users)
+--profile manual    # Force Profile 5 for maximum 7m range capability
 ```
 
 #### Continuous Monitoring

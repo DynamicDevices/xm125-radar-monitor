@@ -283,6 +283,14 @@ pub enum Commands {
         )]
         frame_rate: Option<f32>,
 
+        /// Profile selection mode
+        #[arg(
+            long,
+            default_value = "auto",
+            help = "Profile mode: auto (firmware selects optimal profile) or manual (force Profile 5 for 7m)"
+        )]
+        profile: ProfileMode,
+
         /// Enable continuous monitoring mode
         #[arg(long, help = "Continuously monitor presence detection")]
         continuous: bool,
@@ -449,6 +457,14 @@ pub enum PresenceRange {
     Medium,
     /// Long range: 50cm to 7m (maximum detection range)
     Long,
+}
+
+#[derive(Clone, Debug, ValueEnum)]
+pub enum ProfileMode {
+    /// Automatic profile selection based on range (default, recommended)
+    Auto,
+    /// Manual profile selection for advanced users (Profile 5 for 7m range)
+    Manual,
 }
 
 impl From<PresenceRange> for crate::radar::PresenceRange {

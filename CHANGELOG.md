@@ -1,5 +1,27 @@
 # Changelog
 
+## [2.0.5] - 2025-10-24
+
+### 🎛️ **PROFILE MODE SELECTION**
+
+#### ✨ **New CLI Option: --profile**
+- **ADDED**: `--profile auto` (default) - Firmware selects optimal profile based on range
+- **ADDED**: `--profile manual` - Force Profile 5 for maximum 7m range capability
+- **DEFAULT**: Auto profile mode for user-friendly operation
+- **VERIFIED**: Both modes tested on target hardware with register debugging
+
+#### 🔧 **Enhanced Configuration Control**
+- **AUTO MODE**: Enables Auto Profile (0x004E=1) and Auto Step Length (0x004F=1)
+- **MANUAL MODE**: Disables Auto Profile (0x004E=0), sets Manual Profile 5 (0x0050=5)
+- **INTELLIGENT**: Manual mode calculates optimal step length for range
+- **BACKWARD COMPATIBLE**: Existing commands work unchanged (default to auto)
+
+#### 📚 **Updated Documentation**
+- **ADDED**: Profile Mode Configuration section in README
+- **UPDATED**: Quick Start examples with profile options
+- **ENHANCED**: Register debugging examples show profile differences
+- **CLEAR**: Auto vs Manual mode benefits explained
+
 ## [2.0.4] - 2025-10-24
 
 ### 🚀 **VERIFIED 7M DETECTION RANGE**

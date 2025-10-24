@@ -134,30 +134,42 @@ impl<'a> PresenceDetector<'a> {
         frame_rate: f32,
         profile: u32,
         step_length: u32,
+        auto_profile_enabled: bool,
     ) -> Result<()> {
         // Write threshold and frame rate configuration
         let intra_threshold_scaled = (intra_threshold * 1000.0) as u32;
         let inter_threshold_scaled = (inter_threshold * 1000.0) as u32;
         let frame_rate_scaled = (frame_rate * 1000.0) as u32;
 
-        // CRITICAL: Use Philip's working configuration approach
-        // Disable Auto Profile and Auto Step Length (Philip's config: profile: null, step_length: null means manual)
-        info!("Disabling Auto Profile and Auto Step Length (matching Philip's working config: profile/step_length = null)");
-        self.i2c
-            .write_register(PRESENCE_REG_AUTO_PROFILE_ADDRESS, &0u32.to_be_bytes())?;
-        self.i2c
-            .write_register(PRESENCE_REG_AUTO_STEP_LENGTH_ADDRESS, &0u32.to_be_bytes())?;
+        // Configure Auto Profile based on user preference
+        if auto_profile_enabled {
+            info!("✅ Enabling Auto Profile (firmware selects optimal profile based on range)");
+            self.i2c
+                .write_register(PRESENCE_REG_AUTO_PROFILE_ADDRESS, &1u32.to_be_bytes())?;
+            self.i2c
+                .write_register(PRESENCE_REG_AUTO_STEP_LENGTH_ADDRESS, &1u32.to_be_bytes())?;
+        } else {
+            info!(
+                "🔧 Disabling Auto Profile (using manual Profile {} for 7m range)",
+                profile
+            );
+            self.i2c
+                .write_register(PRESENCE_REG_AUTO_PROFILE_ADDRESS, &0u32.to_be_bytes())?;
+            self.i2c
+                .write_register(PRESENCE_REG_AUTO_STEP_LENGTH_ADDRESS, &0u32.to_be_bytes())?;
 
-        info!(
-            "Applying Manual Profile {} and Step Length {}",
-            profile, step_length
-        );
-        self.i2c
-            .write_register(PRESENCE_REG_MANUAL_PROFILE_ADDRESS, &profile.to_be_bytes())?;
-        self.i2c.write_register(
-            PRESENCE_REG_MANUAL_STEP_LENGTH_ADDRESS,
-            &step_length.to_be_bytes(),
-        )?;
+            // Set manual profile and step length when auto is disabled
+            info!(
+                "Applying Manual Profile {} and Step Length {}",
+                profile, step_length
+            );
+            self.i2c
+                .write_register(PRESENCE_REG_MANUAL_PROFILE_ADDRESS, &profile.to_be_bytes())?;
+            self.i2c.write_register(
+                PRESENCE_REG_MANUAL_STEP_LENGTH_ADDRESS,
+                &step_length.to_be_bytes(),
+            )?;
+        }
 
         // CRITICAL: Enable Auto Subsweeps (Philip's config: automatic_subsweeps: true)
         info!("Enabling Auto Subsweeps (matching Philip's working config)");

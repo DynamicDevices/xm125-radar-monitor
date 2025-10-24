@@ -42,6 +42,7 @@ pub struct XM125Config {
     pub inter_detection_threshold: f32,
     pub frame_rate: f32,
     pub sweeps_per_frame: u32,
+    pub auto_profile_enabled: bool,
     // Connection settings
     pub auto_reconnect: bool,
     pub measurement_interval_ms: u64,
@@ -62,6 +63,7 @@ impl Default for XM125Config {
             inter_detection_threshold: 1.0,
             frame_rate: 12.0,
             sweeps_per_frame: 16,
+            auto_profile_enabled: true, // Default to auto profile (user-friendly)
             // Connection settings
             auto_reconnect: true,
             measurement_interval_ms: 1000,
@@ -280,12 +282,55 @@ impl XM125Radar {
             self.config.frame_rate,
             profile,
             step_length,
+            self.config.auto_profile_enabled,
         )?;
 
         // Apply configuration
         presence_detector.apply_configuration().await?;
 
         info!("✅ Presence detector configured successfully");
+        Ok(())
+    }
+
+    /// Configure presence range and parameters (called from main.rs)
+    pub fn configure_presence_range(&mut self) -> Result<()> {
+        info!("🔧 Configuring presence range and parameters...");
+
+        // Set detector mode to presence
+        self.config.detector_mode = DetectorMode::Presence;
+
+        // Create presence detector and configure it
+        let mut presence_detector = presence::PresenceDetector::new(&mut self.i2c);
+
+        // Configure range (check for custom range override)
+        let custom_start = if self.config.start_m > 0.0 {
+            Some(self.config.start_m)
+        } else {
+            None
+        };
+        let custom_length = if self.config.length_m > 0.0 {
+            Some(self.config.length_m)
+        } else {
+            None
+        };
+
+        let (profile, step_length) = presence_detector.configure_range(
+            self.config.presence_range,
+            custom_start,
+            custom_length,
+        )?;
+
+        // Pass the auto_profile_enabled config to configure_thresholds
+        presence_detector.configure_thresholds(
+            self.config.intra_detection_threshold,
+            self.config.inter_detection_threshold,
+            self.config.frame_rate,
+            profile,
+            step_length,
+            self.config.auto_profile_enabled, // Pass the profile mode
+        )?;
+
+        info!("✅ Presence range and parameters configured successfully");
         Ok(())
     }
 
@@ -349,56 +394,6 @@ impl XM125Radar {
     pub fn debug_registers(&mut self, mode: &str) -> Result<()> {
         let mut debugger = debug::RegisterDebugger::new(&mut self.i2c);
         debugger.debug_all_registers(mode)
-    }
-
-    /// Configure presence range (for backward compatibility with main.rs)
-    pub fn configure_presence_range(&mut self) -> Result<()> {
-        // Create presence detector and configure range
-        let mut presence_detector = presence::PresenceDetector::new(&mut self.i2c);
-
-        // Check if custom range was explicitly set (not default values)
-        // Default values are start_m=0.10, length_m=2.90 for distance mode
-        // For presence mode, we should use the presence_range preset unless explicitly overridden
-        let is_custom_range = self.config.start_m != 0.10 || self.config.length_m != 2.90;
-
-        let (custom_start, custom_length) = if is_custom_range {
-            (Some(self.config.start_m), Some(self.config.length_m))
-        } else {
-            (None, None)
-        };
-
-        let (profile, step_length) = presence_detector.configure_range(
-            self.config.presence_range,
-            custom_start,
-            custom_length,
-        )?;
-        presence_detector.configure_thresholds(
-            self.config.intra_detection_threshold,
-            self.config.inter_detection_threshold,
-            self.config.frame_rate,
-            profile,
-            step_length,
-        )?;
-
-        // Calculate final range values for apply_complete_configuration
-        let (final_start_mm, final_end_mm) =
-            if let (Some(start_m), Some(length_m)) = (custom_start, custom_length) {
-                let start_mm = (start_m * 1000.0) as u32;
-                let end_mm = ((start_m + length_m) * 1000.0) as u32;
-                (start_mm, end_mm)
-            } else {
-                // Use preset range values
-                match self.config.presence_range {
-                    presence::PresenceRange::Short => (60u32, 700u32),
-                    presence::PresenceRange::Medium => (200u32, 2000u32),
-                    presence::PresenceRange::Long => (300u32, 5500u32),
-                }
-            };
-
-        // Apply complete configuration including range settings
-        presence_detector.apply_complete_configuration(final_start_mm, final_end_mm)?;
-
-        Ok(())
     }
 
     /// Configure distance range from string (e.g., "0.1:3.0")

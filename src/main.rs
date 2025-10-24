@@ -13,7 +13,7 @@ mod gpio;
 mod i2c;
 mod radar;
 
-use cli::{Cli, Commands, FirmwareAction, GpioAction, PresenceRange};
+use cli::{Cli, Commands, FirmwareAction, GpioAction, PresenceRange, ProfileMode};
 use error::RadarError;
 use gpio::XM125GpioController;
 use radar::XM125Radar;
@@ -164,6 +164,7 @@ async fn execute_command(cli: &Cli, radar: &mut XM125Radar) -> Result<(), RadarE
             max_range,
             sensitivity,
             frame_rate,
+            profile,
             continuous,
             count,
             interval,
@@ -180,6 +181,7 @@ async fn execute_command(cli: &Cli, radar: &mut XM125Radar) -> Result<(), RadarE
                 *max_range,
                 *sensitivity,
                 *frame_rate,
+                profile,
             )?;
 
             // Debug registers if requested (global option)
@@ -248,6 +250,7 @@ fn configure_distance_range(radar: &mut XM125Radar, range_str: &str) -> Result<(
 }
 
 /// Configure presence parameters for the radar
+#[allow(unused_assignments)]
 fn configure_presence_parameters(
     radar: &mut radar::XM125Radar,
     presence_range: Option<&PresenceRange>,
@@ -255,6 +258,7 @@ fn configure_presence_parameters(
     max_range: Option<f32>,
     sensitivity: Option<f32>,
     frame_rate: Option<f32>,
+    profile: &ProfileMode,
 ) -> Result<(), RadarError> {
     let mut config_changed = false;
 
@@ -316,6 +320,19 @@ fn configure_presence_parameters(
         radar.config.frame_rate = rate;
         config_changed = true;
     }
+
+    // Configure profile mode
+    match profile {
+        ProfileMode::Auto => {
+            radar.config.auto_profile_enabled = true;
+            info!("🔧 Using automatic profile selection (recommended)");
+        }
+        ProfileMode::Manual => {
+            radar.config.auto_profile_enabled = false;
+            info!("🔧 Using manual profile selection (Profile 5 for 7m range)");
+        }
+    }
+    config_changed = true; // Profile setting always triggers config change
 
     // Apply configuration to hardware if anything changed OR if no range was specified
     // (to ensure default long range is properly applied)
