@@ -48,11 +48,15 @@ jobs:
     - name: Build for ${{ matrix.target }}
       run: cargo build --release --target ${{ matrix.target }}
       
+    - name: Rename binary for release
+      run: |
+        cp target/${{ matrix.target }}/release/xm125-radar-monitor xm125-radar-monitor-${{ matrix.target }}
+        
     - name: Create Release
       uses: softprops/action-gh-release@v1
       if: startsWith(github.ref, 'refs/tags/')
       with:
-        files: target/${{ matrix.target }}/release/xm125-radar-monitor
+        files: xm125-radar-monitor-${{ matrix.target }}
         name: Release ${{ github.ref_name }}
         body: |
           ## XM125 Radar Monitor ${{ github.ref_name }}
