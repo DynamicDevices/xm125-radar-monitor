@@ -217,6 +217,42 @@ impl<'a> PresenceDetector<'a> {
         info!("Waiting for module reset to complete...");
         self.wait_for_not_busy()?;
 
+        // CRITICAL: Configure Auto Profile settings AFTER reset (reset wipes these settings)
+        info!("Disabling Auto Profile and Auto Step Length AFTER reset");
+        self.i2c
+            .write_register(PRESENCE_REG_AUTO_PROFILE_ADDRESS, &0u32.to_be_bytes())?;
+        self.i2c
+            .write_register(PRESENCE_REG_AUTO_STEP_LENGTH_ADDRESS, &0u32.to_be_bytes())?;
+
+        // Calculate and set optimal profile for 7m range
+        let optimal_profile: u32 = if final_end_mm >= 6500 { 5 } else { 4 }; // Profile 5 for 7m
+        let optimal_step_length = ((final_end_mm as f32 / 1000.0) * 1000.0 / 60.0) as u32;
+        let optimal_step_length = optimal_step_length.clamp(12, 120);
+
+        info!(
+            "Setting Manual Profile {} and Step Length {} for {}mm range",
+            optimal_profile, optimal_step_length, final_end_mm
+        );
+        self.i2c.write_register(
+            PRESENCE_REG_MANUAL_PROFILE_ADDRESS,
+            &optimal_profile.to_be_bytes(),
+        )?;
+        self.i2c.write_register(
+            PRESENCE_REG_MANUAL_STEP_LENGTH_ADDRESS,
+            &optimal_step_length.to_be_bytes(),
+        )?;
+
+        // Set Signal Quality to 20000 for long range
+        let signal_quality = 20000u32;
+        info!(
+            "Setting Signal Quality to {} for long range detection",
+            signal_quality
+        );
+        self.i2c.write_register(
+            PRESENCE_REG_SIGNAL_QUALITY_ADDRESS,
+            &signal_quality.to_be_bytes(),
+        )?;
+
         // CRITICAL: Write range values LAST to prevent them being overwritten by profile settings
         info!(
             "Writing start range to register 0x{:04X} ({}): {} mm",
