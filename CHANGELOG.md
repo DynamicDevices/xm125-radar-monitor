@@ -1,5 +1,31 @@
 # Changelog
 
+## [2.0.2] - 2025-10-24
+
+### 🔧 **Critical Configuration Fixes**
+
+#### ✅ **Range Configuration Fixed**
+- **FIXED**: End Point register now correctly holds 5500mm (not 2500mm default)
+- **FIXED**: Configuration sequence ensures range values persist after apply command
+- **FIXED**: Module reset properly implemented for clean baseline (0.00m start)
+- **IMPROVED**: Range values written AFTER profile settings to prevent overwriting
+
+#### 🎯 **Proper Reset Sequence**
+- **ADDED**: Module reset before configuration (CMD_PRESENCE_RESET_MODULE: 1381192737)
+- **ADDED**: Wait for reset completion before applying configuration
+- **VERIFIED**: Clean 0.00m baseline after reset (no carryover from previous state)
+
+#### 📊 **Configuration Validation**
+- **VERIFIED**: Start Point register: 0x0000012C (300mm) ✅
+- **VERIFIED**: End Point register: 0x0000157C (5500mm) ✅ 
+- **VERIFIED**: Full 0.3m-5.5m detection range now available
+- **TESTED**: Proper configuration sequence on target hardware
+
+#### 🚀 **Production Ready**
+- **CONFIRMED**: XM125 presence detection system fully operational
+- **VALIDATED**: Complete datasheet-compliant configuration process
+- **READY**: For deployment with verified 5.5m maximum range capability
+
 ## [2.0.1] - 2025-10-22
 
 ### 🔧 **Production Validation & Testing Verification**

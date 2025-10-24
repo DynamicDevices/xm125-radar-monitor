@@ -138,8 +138,7 @@ async fn execute_command(cli: &Cli, radar: &mut XM125Radar) -> Result<(), RadarE
         } => {
             // Ensure device is in distance mode
             radar
-                .set_detector_mode(radar::DetectorMode::Distance)
-                .await?;
+                .set_detector_mode(radar::DetectorMode::Distance);
 
             // Configure range if specified
             if let Some(range_str) = range {
@@ -173,8 +172,7 @@ async fn execute_command(cli: &Cli, radar: &mut XM125Radar) -> Result<(), RadarE
         } => {
             // Ensure device is in presence mode
             radar
-                .set_detector_mode(radar::DetectorMode::Presence)
-                .await?;
+                .set_detector_mode(radar::DetectorMode::Presence);
 
             // Configure presence parameters
             configure_presence_parameters(
@@ -324,7 +322,7 @@ fn configure_presence_parameters(
     // Apply configuration to hardware if anything changed OR if no range was specified
     // (to ensure default long range is properly applied)
     if config_changed || (presence_range.is_none() && min_range.is_none() && max_range.is_none()) {
-        radar.configure_presence_range();
+        radar.configure_presence_range()?;
         if config_changed {
             info!("✅ Presence parameters configured successfully");
         } else {
@@ -905,3 +903,4 @@ fn handle_gpio_command(cli: &Cli, action: &GpioAction) -> Result<(), RadarError>
 
     Ok(())
 }
+

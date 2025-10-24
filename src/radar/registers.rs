@@ -1,0 +1,110 @@
+// XM125 Register Definitions and Constants
+
+#![allow(clippy::pedantic)]
+// Based on official Acconeer documentation: distance_reg_protocol.h, presence_reg_protocol.h
+
+use std::time::Duration;
+
+// XM125 I2C Register Addresses (from distance_reg_protocol.h)
+pub const REG_VERSION: u16 = 0; // DISTANCE_REG_VERSION_ADDRESS
+pub const REG_PROTOCOL_STATUS: u16 = 1; // DISTANCE_REG_PROTOCOL_STATUS_ADDRESS
+pub const REG_MEASURE_COUNTER: u16 = 2; // DISTANCE_REG_MEASURE_COUNTER_ADDRESS
+pub const REG_DETECTOR_STATUS: u16 = 3; // DISTANCE_REG_DETECTOR_STATUS_ADDRESS
+pub const REG_DISTANCE_RESULT: u16 = 16; // DISTANCE_REG_DISTANCE_RESULT_ADDRESS
+pub const REG_PEAK0_DISTANCE: u16 = 17; // DISTANCE_REG_PEAK0_DISTANCE_ADDRESS
+pub const REG_PEAK0_STRENGTH: u16 = 27; // DISTANCE_REG_PEAK0_STRENGTH_ADDRESS
+
+// Distance detector configuration registers (from distance_reg_protocol.h)
+pub const REG_START_CONFIG: u16 = 64; // DISTANCE_REG_START_ADDRESS (0x40)
+pub const REG_END_CONFIG: u16 = 65; // DISTANCE_REG_END_ADDRESS (0x41)
+pub const REG_MAX_STEP_LENGTH: u16 = 66; // DISTANCE_REG_MAX_STEP_LENGTH_ADDRESS (0x42)
+pub const REG_CLOSE_RANGE_LEAKAGE_CANCELLATION: u16 = 67; // DISTANCE_REG_CLOSE_RANGE_LEAKAGE_CANCELLATION_ADDRESS (0x43)
+pub const REG_SIGNAL_QUALITY: u16 = 68; // DISTANCE_REG_SIGNAL_QUALITY_ADDRESS (0x44)
+pub const REG_MAX_PROFILE: u16 = 69; // DISTANCE_REG_MAX_PROFILE_ADDRESS (0x45)
+pub const REG_THRESHOLD_METHOD: u16 = 70; // DISTANCE_REG_THRESHOLD_METHOD_ADDRESS (0x46)
+pub const REG_PEAK_SORTING: u16 = 71; // DISTANCE_REG_PEAK_SORTING_ADDRESS (0x47)
+pub const REG_NUM_FRAMES_RECORDED_THRESHOLD: u16 = 72; // DISTANCE_REG_NUM_FRAMES_RECORDED_THRESHOLD_ADDRESS (0x48)
+pub const REG_FIXED_AMPLITUDE_THRESHOLD_VALUE: u16 = 73; // DISTANCE_REG_FIXED_AMPLITUDE_THRESHOLD_VALUE_ADDRESS (0x49)
+pub const REG_THRESHOLD_SENSITIVITY: u16 = 74; // DISTANCE_REG_THRESHOLD_SENSITIVITY_ADDRESS (0x4A)
+pub const REG_REFLECTOR_SHAPE: u16 = 75; // DISTANCE_REG_REFLECTOR_SHAPE_ADDRESS (0x4B)
+pub const REG_FIXED_STRENGTH_THRESHOLD_VALUE: u16 = 76; // DISTANCE_REG_FIXED_STRENGTH_THRESHOLD_VALUE_ADDRESS (0x4C)
+pub const REG_COMMAND: u16 = 256; // DISTANCE_REG_COMMAND_ADDRESS
+pub const REG_APPLICATION_ID: u16 = 65535; // DISTANCE_REG_APPLICATION_ID_ADDRESS
+
+// Presence Detection Registers (from presence_reg_protocol.h)
+pub const REG_PRESENCE_RESULT: u16 = 16; // PRESENCE_REG_PRESENCE_RESULT_ADDRESS
+pub const REG_PRESENCE_DISTANCE: u16 = 17; // PRESENCE_REG_PRESENCE_DISTANCE_ADDRESS
+pub const REG_INTRA_PRESENCE_SCORE: u16 = 18; // PRESENCE_REG_INTRA_PRESENCE_SCORE_ADDRESS
+pub const REG_INTER_PRESENCE_SCORE: u16 = 19; // PRESENCE_REG_INTER_PRESENCE_SCORE_ADDRESS
+
+// Presence detector register addresses (from presence_reg_protocol.h)
+pub const PRESENCE_REG_COMMAND_ADDRESS: u16 = 256; // 0x100
+pub const PRESENCE_REG_DETECTOR_STATUS_ADDRESS: u16 = 3;
+pub const PRESENCE_REG_START_ADDRESS: u16 = 82; // PRESENCE_REG_START_ADDRESS
+pub const PRESENCE_REG_END_ADDRESS: u16 = 83; // PRESENCE_REG_END_ADDRESS
+pub const PRESENCE_REG_INTRA_DETECTION_THRESHOLD_ADDRESS: u16 = 70;
+pub const PRESENCE_REG_INTER_DETECTION_THRESHOLD_ADDRESS: u16 = 71;
+pub const PRESENCE_REG_FRAME_RATE_ADDRESS: u16 = 69;
+pub const PRESENCE_REG_AUTO_PROFILE_ADDRESS: u16 = 78; // 0x004E - Auto profile selection enable/disable
+pub const PRESENCE_REG_AUTO_STEP_LENGTH_ADDRESS: u16 = 79; // 0x004F - Auto step length enable/disable
+pub const PRESENCE_REG_MANUAL_PROFILE_ADDRESS: u16 = 80; // 0x0050 - Manual profile (1-5)
+pub const PRESENCE_REG_MANUAL_STEP_LENGTH_ADDRESS: u16 = 81; // 0x0051 - Manual step length
+pub const PRESENCE_REG_HWAAS_ADDRESS: u16 = 85; // 0x0055 - Hardware accelerated average samples
+pub const PRESENCE_REG_AUTO_SUBSWEEPS_ADDRESS: u16 = 86; // 0x0056 - Automatic subsweeps enable/disable
+pub const PRESENCE_REG_SIGNAL_QUALITY_ADDRESS: u16 = 87; // 0x0057 - Signal quality threshold
+pub const PRESENCE_REG_MANUAL_SUBSWEEPS_ADDRESS: u16 = 88; // 0x0058 - Manual subsweeps (when auto disabled)
+
+// Command codes for XM125 (from distance_reg_protocol.h)
+pub const CMD_APPLY_CONFIG_AND_CALIBRATE: u32 = 1; // DISTANCE_REG_COMMAND_ENUM_APPLY_CONFIG_AND_CALIBRATE
+pub const CMD_MEASURE_DISTANCE: u32 = 2; // DISTANCE_REG_COMMAND_ENUM_MEASURE_DISTANCE
+pub const CMD_APPLY_CONFIGURATION: u32 = 3; // DISTANCE_REG_COMMAND_ENUM_APPLY_CONFIGURATION
+pub const CMD_CALIBRATE: u32 = 4; // DISTANCE_REG_COMMAND_ENUM_CALIBRATE
+pub const CMD_RECALIBRATE: u32 = 5; // DISTANCE_REG_COMMAND_ENUM_RECALIBRATE
+pub const CMD_RESET_MODULE: u32 = 0x52535421; // DISTANCE_REG_COMMAND_ENUM_RESET_MODULE
+
+// Status bit masks for compliance with sections 2.3.1 and 2.3.2
+pub const STATUS_BUSY_MASK: u32 = 0x80000000; // DISTANCE_REG_DETECTOR_STATUS_FIELD_BUSY_MASK (bit 31)
+pub const STATUS_ERROR_MASK: u32 = 0x10000000; // DISTANCE_REG_DETECTOR_STATUS_FIELD_DETECTOR_ERROR_MASK (bit 28)
+
+// Presence detector specific commands (from datasheet enum)
+pub const CMD_PRESENCE_APPLY_CONFIGURATION: u32 = 1; // APPLY CONFIGURATION - Apply the configuration
+pub const CMD_PRESENCE_START_DETECTOR: u32 = 2; // START DETECTOR - Start the presence detector
+pub const CMD_PRESENCE_STOP_DETECTOR: u32 = 3; // STOP DETECTOR - Stop the presence detector
+pub const CMD_PRESENCE_ENABLE_UART_LOGS: u32 = 32; // ENABLE UART LOGS - DEBUG: Enable UART Logs
+pub const CMD_PRESENCE_DISABLE_UART_LOGS: u32 = 33; // DISABLE UART LOGS - DEBUG: Disable UART Logs
+pub const CMD_PRESENCE_LOG_CONFIGURATION: u32 = 34; // LOG CONFIGURATION - DEBUG: Print detector configuration to UART
+pub const CMD_PRESENCE_RESET_MODULE: u32 = 1381192737; // RESET MODULE - Reset module, needed to make a new configuration
+
+// Status flags (generic for backward compatibility)
+pub const STATUS_RSS_REGISTER_OK: u32 = 0x00000001;
+pub const STATUS_CONFIG_CREATE_OK: u32 = 0x00000002;
+pub const STATUS_SENSOR_CREATE_OK: u32 = 0x00000004;
+pub const STATUS_SENSOR_CALIBRATE_OK: u32 = 0x00000008;
+pub const STATUS_DETECTOR_CREATE_OK: u32 = 0x00000010;
+pub const STATUS_CONFIG_APPLY_OK: u32 = 0x00000080;
+pub const STATUS_BUSY: u32 = 0x80000000;
+pub const STATUS_ERROR: u32 = 0x10000000;
+
+// Legacy compatibility
+pub const STATUS_DETECTOR_READY: u32 = STATUS_DETECTOR_CREATE_OK;
+pub const STATUS_CALIBRATION_DONE: u32 = STATUS_SENSOR_CALIBRATE_OK;
+pub const STATUS_MEASUREMENT_READY: u32 = 0x04;
+
+// Timeout constants - based on Acconeer documentation
+pub const CALIBRATION_TIMEOUT: Duration = Duration::from_secs(2);
+pub const MEASUREMENT_TIMEOUT: Duration = Duration::from_secs(5);
+
+// Distance detector default values (from distance_reg_protocol.h)
+pub const DISTANCE_START_DEFAULT: u32 = 100; // 100mm = 0.1m
+pub const DISTANCE_END_DEFAULT: u32 = 3000; // 3000mm = 3.0m
+pub const DISTANCE_MAX_STEP_LENGTH_DEFAULT: u32 = 0; // Auto step length
+pub const DISTANCE_CLOSE_RANGE_LEAKAGE_CANCELLATION_DEFAULT: u32 = 1; // Enabled
+pub const DISTANCE_SIGNAL_QUALITY_DEFAULT: u32 = 15000; // Signal quality threshold
+pub const DISTANCE_MAX_PROFILE_DEFAULT: u32 = 5; // Profile 5
+pub const DISTANCE_THRESHOLD_METHOD_DEFAULT: u32 = 0; // CFAR method
+pub const DISTANCE_PEAK_SORTING_DEFAULT: u32 = 0; // Strongest peaks
+pub const DISTANCE_NUM_FRAMES_RECORDED_THRESHOLD_DEFAULT: u32 = 100; // Frames for threshold calculation
+pub const DISTANCE_FIXED_AMPLITUDE_THRESHOLD_VALUE_DEFAULT: u32 = 100000; // Fixed amplitude threshold
+pub const DISTANCE_THRESHOLD_SENSITIVITY_DEFAULT: u32 = 100; // 0.1 sensitivity (factor 1000)
+pub const DISTANCE_REFLECTOR_SHAPE_DEFAULT: u32 = 0; // Generic reflector
+pub const DISTANCE_FIXED_STRENGTH_THRESHOLD_VALUE_DEFAULT: u32 = 0; // Fixed strength threshold
