@@ -5,18 +5,19 @@
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org)
 [![Platform](https://img.shields.io/badge/platform-ARM64%20Linux-green.svg)](https://github.com/DynamicDevices/xm125-radar-monitor)
 
-Production-ready CLI tool for Acconeer XM125 radar modules with automatic firmware management and comprehensive configuration options.
+Production-ready CLI tool for Acconeer XM125 radar modules with verified 7m detection range and comprehensive configuration control.
 
-**Version**: 2.0.0  
+**Version**: 2.0.4  
 **Maintainer**: Alex J Lennon (ajlennon@dynamicdevices.co.uk)  
 **Copyright**: © 2025 Dynamic Devices Ltd. All rights reserved.
 
 ## Features
 
+- **Verified 7m Detection Range**: Properly configured Profile 5 with Auto Profile disabled
 - **Measurement-Centric CLI**: Clean, intuitive commands for distance and presence detection
 - **Advanced Testing Framework**: Range, angle, and false positive analysis with signal strength indicators
 - **Automatic Firmware Management**: Auto-detects and updates firmware via `stm32flash`
-- **Comprehensive Configuration**: Direct parameter control with custom ranges and sensitivity
+- **Comprehensive Configuration**: Direct parameter control with custom ranges up to 7m
 - **Enhanced Monitoring**: Continuous operation with detailed CSV export and confidence analysis
 - **Internal GPIO Control**: Hardware reset and bootloader control without external scripts
 - **Register-Level Debugging**: Complete register dumps with descriptions for optimization
@@ -25,21 +26,22 @@ Production-ready CLI tool for Acconeer XM125 radar modules with automatic firmwa
 ## Quick Start
 
 ```bash
-# Check device status and information
+# Device status and information
 sudo xm125-radar-monitor status
 sudo xm125-radar-monitor info
 
-# Basic presence detection (single measurement, default long range)
-sudo xm125-radar-monitor presence --range long
+# Presence detection (verified 7m range capability)
+sudo xm125-radar-monitor presence --range long                    # 0.3m-5.5m preset
+sudo xm125-radar-monitor presence --min-range 0.5 --max-range 7.0 # Full 7m range
 
-# Distance measurement with custom range
+# Distance measurement
 sudo xm125-radar-monitor distance --min-range 0.2 --max-range 3.0
 
-# Continuous monitoring with custom range and register debug
-sudo xm125-radar-monitor --debug-registers presence --min-range 0.3 --max-range 5.0 --continuous --count 100 --interval 500
+# Continuous monitoring with CSV export
+sudo xm125-radar-monitor presence --min-range 0.5 --max-range 7.0 --continuous --count 100 --save-to data.csv
 
-# Infinite monitoring with CSV export
-sudo xm125-radar-monitor presence --range long --continuous --save-to occupancy.csv
+# Register debugging (verify configuration)
+sudo xm125-radar-monitor --debug-registers presence --min-range 0.5 --max-range 7.0
 ```
 
 ## Hardware Requirements
@@ -74,10 +76,11 @@ sudo xm125-radar-monitor gpio            # GPIO control (init, status, reset, te
 ```bash
 # Preset ranges (default: long)
 --range short    # 6cm - 70cm (close proximity)
---range medium   # 20cm - 2m (balanced)
---range long     # 50cm - 7m (room occupancy, default)
+--range medium   # 20cm - 2m (balanced)  
+--range long     # 30cm - 5.5m (room occupancy, default)
 
 # Custom ranges (both required, conflicts with presets)
+--min-range 0.5 --max-range 7.0   # Full 7m range (verified)
 --min-range 0.3 --max-range 5.0   # Custom 30cm - 5m range
 ```
 

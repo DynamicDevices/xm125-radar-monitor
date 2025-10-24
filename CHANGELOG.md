@@ -1,5 +1,41 @@
 # Changelog
 
+## [2.0.4] - 2025-10-24
+
+### 🚀 **VERIFIED 7M DETECTION RANGE**
+
+#### ✅ **Critical Configuration Sequence Fixed**
+- **FIXED**: Auto Profile disable moved AFTER reset (reset was wiping settings)
+- **FIXED**: Force Profile 5 for ranges ≥ 6.5m (required for 7m detection)
+- **FIXED**: Signal Quality set to 20000 for long range performance
+- **VERIFIED**: Configuration sequence: reset → disable auto → set manual → apply
+
+#### 📊 **Hardware Validation Complete**
+- **VERIFIED**: Auto Profile (0x004E): 0 (disabled) ✅
+- **VERIFIED**: Auto Step Length (0x004F): 0 (disabled) ✅  
+- **VERIFIED**: Manual Profile (0x0050): 5 (for 7m range) ✅
+- **VERIFIED**: Signal Quality (0x0057): 20000 ✅
+- **VERIFIED**: End Point (0x0053): 7000 (7.0m) ✅
+
+#### 🎯 **Production Deployment Ready**
+- **CONFIRMED**: True 7m detection range operational on target hardware
+- **VALIDATED**: Complete register configuration compliance
+- **TESTED**: Full configuration sequence with proper timing
+- **DOCUMENTED**: Updated README with verified 7m capability
+
+#### 🔧 **Technical Implementation**
+- Dynamic profile selection based on range (Profile 5 for ≥6.5m)
+- Optimal step length calculation for maximum range
+- Post-reset configuration to prevent setting conflicts
+- Enhanced register debugging for validation
+
+## [2.0.3] - 2025-10-24
+
+### 🔧 **Critical 7m Range Configuration Fix**
+- **CRITICAL**: Fixed Auto Profile configuration timing
+- **ADDED**: Profile 5 selection for 7m range capability
+- **IMPROVED**: Signal Quality optimization for long range
+
 ## [2.0.2] - 2025-10-24
 
 ### 🔧 **Critical Configuration Fixes**
