@@ -3,21 +3,21 @@
 #![allow(clippy::pedantic)]
 // Main interface for XM125 radar functionality with modular design
 
-pub mod registers;
-pub mod presence;
-pub mod distance;
 pub mod debug;
+pub mod distance;
+pub mod presence;
+pub mod registers;
 
 use crate::error::{RadarError, Result};
-use crate::i2c::I2cDevice;
 use crate::gpio::{XM125GpioController, XM125GpioPins};
+use crate::i2c::I2cDevice;
 use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
 // Re-export public types
-pub use presence::{PresenceRange, PresenceMeasurement};
 pub use distance::DistanceMeasurement;
+pub use presence::{PresenceMeasurement, PresenceRange};
 pub use registers::*;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -139,18 +139,18 @@ impl XM125Radar {
         let mut gpio_controller = XM125GpioController::with_pins(pins);
 
         // Initialize GPIO pins
-        gpio_controller.initialize().map_err(|e| {
-            RadarError::DeviceError {
+        gpio_controller
+            .initialize()
+            .map_err(|e| RadarError::DeviceError {
                 message: format!("Failed to initialize GPIO for reset: {}", e),
-            }
-        })?;
+            })?;
 
         // Reset to run mode
-        gpio_controller.reset_to_run_mode().map_err(|e| {
-            RadarError::DeviceError {
+        gpio_controller
+            .reset_to_run_mode()
+            .map_err(|e| RadarError::DeviceError {
                 message: format!("Failed to reset XM125 to run mode: {}", e),
-            }
-        })?;
+            })?;
 
         info!("XM125 hardware reset to run mode completed using internal GPIO");
         Ok(())
@@ -159,7 +159,12 @@ impl XM125Radar {
     /// Get raw status from device
     fn get_status_raw(&mut self) -> Result<u32> {
         let status_data = self.i2c.read_register(REG_DETECTOR_STATUS, 4)?;
-        Ok(u32::from_be_bytes([status_data[0], status_data[1], status_data[2], status_data[3]]))
+        Ok(u32::from_be_bytes([
+            status_data[0],
+            status_data[1],
+            status_data[2],
+            status_data[3],
+        ]))
     }
 
     /// Get formatted status string
@@ -195,10 +200,20 @@ impl XM125Radar {
     /// Get device information
     pub fn get_info(&mut self) -> Result<String> {
         let version_data = self.i2c.read_register(REG_VERSION, 4)?;
-        let version = u32::from_be_bytes([version_data[0], version_data[1], version_data[2], version_data[3]]);
-        
+        let version = u32::from_be_bytes([
+            version_data[0],
+            version_data[1],
+            version_data[2],
+            version_data[3],
+        ]);
+
         let app_id_data = self.i2c.read_register(REG_APPLICATION_ID, 4)?;
-        let app_id = u32::from_be_bytes([app_id_data[0], app_id_data[1], app_id_data[2], app_id_data[3]]);
+        let app_id = u32::from_be_bytes([
+            app_id_data[0],
+            app_id_data[1],
+            app_id_data[2],
+            app_id_data[3],
+        ]);
 
         Ok(format!(
             "XM125 Radar Module\nVersion: 0x{:08X}\nApplication ID: 0x{:08X}",
@@ -209,7 +224,12 @@ impl XM125Radar {
     /// Read application ID (for firmware compatibility)
     pub fn read_application_id(&mut self) -> Result<u32> {
         let app_id_data = self.i2c.read_register(REG_APPLICATION_ID, 4)?;
-        Ok(u32::from_be_bytes([app_id_data[0], app_id_data[1], app_id_data[2], app_id_data[3]]))
+        Ok(u32::from_be_bytes([
+            app_id_data[0],
+            app_id_data[1],
+            app_id_data[2],
+            app_id_data[3],
+        ]))
     }
 
     /// Set detector mode
@@ -230,29 +250,41 @@ impl XM125Radar {
     /// Configure presence detector
     pub async fn configure_presence_detector(&mut self) -> Result<()> {
         info!("🔧 Configuring presence detector...");
-        
+
         // Set detector mode to presence
         self.config.detector_mode = DetectorMode::Presence;
-        
+
         // Create presence detector and configure it
         let mut presence_detector = presence::PresenceDetector::new(&mut self.i2c);
-        
+
         // Configure range (check for custom range override)
-        let custom_start = if self.config.start_m > 0.0 { Some(self.config.start_m) } else { None };
-        let custom_length = if self.config.length_m > 0.0 { Some(self.config.length_m) } else { None };
-        
-        let (profile, step_length) = presence_detector.configure_range(self.config.presence_range, custom_start, custom_length)?;
+        let custom_start = if self.config.start_m > 0.0 {
+            Some(self.config.start_m)
+        } else {
+            None
+        };
+        let custom_length = if self.config.length_m > 0.0 {
+            Some(self.config.length_m)
+        } else {
+            None
+        };
+
+        let (profile, step_length) = presence_detector.configure_range(
+            self.config.presence_range,
+            custom_start,
+            custom_length,
+        )?;
         presence_detector.configure_thresholds(
             self.config.intra_detection_threshold,
             self.config.inter_detection_threshold,
             self.config.frame_rate,
             profile,
-            step_length
+            step_length,
         )?;
-        
+
         // Apply configuration
         presence_detector.apply_configuration().await?;
-        
+
         info!("✅ Presence detector configured successfully");
         Ok(())
     }
@@ -284,20 +316,20 @@ impl XM125Radar {
     /// Configure distance detector
     pub async fn configure_distance_detector(&mut self) -> Result<()> {
         info!("🔧 Configuring distance detector...");
-        
+
         // Set detector mode to distance
         self.config.detector_mode = DetectorMode::Distance;
-        
+
         // Create distance detector and configure it
         let mut distance_detector = distance::DistanceDetector::new(&mut self.i2c);
-        
+
         distance_detector.configure_range(self.config.start_m, self.config.length_m)?;
         distance_detector.configure_detector()?;
         distance_detector.apply_config_and_calibrate().await?;
-        
+
         self.is_calibrated = true;
         self.last_calibration = Some(Instant::now());
-        
+
         info!("✅ Distance detector configured successfully");
         Ok(())
     }
@@ -323,44 +355,49 @@ impl XM125Radar {
     pub fn configure_presence_range(&mut self) -> Result<()> {
         // Create presence detector and configure range
         let mut presence_detector = presence::PresenceDetector::new(&mut self.i2c);
-        
+
         // Check if custom range was explicitly set (not default values)
         // Default values are start_m=0.10, length_m=2.90 for distance mode
         // For presence mode, we should use the presence_range preset unless explicitly overridden
         let is_custom_range = self.config.start_m != 0.10 || self.config.length_m != 2.90;
-        
+
         let (custom_start, custom_length) = if is_custom_range {
             (Some(self.config.start_m), Some(self.config.length_m))
         } else {
             (None, None)
         };
-        
-        let (profile, step_length) = presence_detector.configure_range(self.config.presence_range, custom_start, custom_length)?;
+
+        let (profile, step_length) = presence_detector.configure_range(
+            self.config.presence_range,
+            custom_start,
+            custom_length,
+        )?;
         presence_detector.configure_thresholds(
             self.config.intra_detection_threshold,
             self.config.inter_detection_threshold,
             self.config.frame_rate,
             profile,
-            step_length
+            step_length,
         )?;
-        
+
         // Calculate final range values for apply_complete_configuration
-        let (final_start_mm, final_end_mm) = if let (Some(start_m), Some(length_m)) = (custom_start, custom_length) {
-            let start_mm = (start_m * 1000.0) as u32;
-            let end_mm = ((start_m + length_m) * 1000.0) as u32;
-            (start_mm, end_mm)
-        } else {
-            // Use preset range values
-            match self.config.presence_range {
-                presence::PresenceRange::Short => (60u32, 700u32),
-                presence::PresenceRange::Medium => (200u32, 2000u32),
-                presence::PresenceRange::Long => (300u32, 5500u32),
-            }
-        };
-        
+        let (final_start_mm, final_end_mm) =
+            if let (Some(start_m), Some(length_m)) = (custom_start, custom_length) {
+                let start_mm = (start_m * 1000.0) as u32;
+                let end_mm = ((start_m + length_m) * 1000.0) as u32;
+                (start_mm, end_mm)
+            } else {
+                // Use preset range values
+                match self.config.presence_range {
+                    presence::PresenceRange::Short => (60u32, 700u32),
+                    presence::PresenceRange::Medium => (200u32, 2000u32),
+                    presence::PresenceRange::Long => (300u32, 5500u32),
+                }
+            };
+
         // Apply complete configuration including range settings
         presence_detector.apply_complete_configuration(final_start_mm, final_end_mm)?;
-        
+
         Ok(())
     }
 
@@ -369,7 +406,10 @@ impl XM125Radar {
         let parts: Vec<&str> = range_str.split(':').collect();
         if parts.len() != 2 {
             return Err(RadarError::DeviceError {
-                message: format!("Invalid range format '{}'. Expected 'start:end' (e.g., '0.1:3.0')", range_str),
+                message: format!(
+                    "Invalid range format '{}'. Expected 'start:end' (e.g., '0.1:3.0')",
+                    range_str
+                ),
             });
         }
 
@@ -390,7 +430,10 @@ impl XM125Radar {
         self.config.start_m = start_m;
         self.config.length_m = end_m - start_m;
 
-        info!("Distance range configured: {:.3}m to {:.3}m", start_m, end_m);
+        info!(
+            "Distance range configured: {:.3}m to {:.3}m",
+            start_m, end_m
+        );
         Ok(())
     }
 }
