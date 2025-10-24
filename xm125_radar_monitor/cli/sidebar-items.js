@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Commands","FirmwareAction","GpioAction","OutputFormat","PresenceRange"],"fn":["parse_i2c_address"],"struct":["Cli"]};
+window.SIDEBAR_ITEMS = {"enum":["Commands","FirmwareAction","GpioAction","OutputFormat","PresenceRange","ProfileMode"],"fn":["parse_i2c_address"],"struct":["Cli"]};
