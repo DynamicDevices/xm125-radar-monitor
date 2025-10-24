@@ -1,5 +1,35 @@
 # Changelog
 
+## [2.0.6] - 2025-10-24
+
+### 🔧 **AUTOMATIC GPIO INITIALIZATION FIX**
+
+#### 🎯 **Critical Post-Reboot Issue Resolved**
+- **FIXED**: Module not available on I2C bus after reboot (ENXIO error)
+- **FIXED**: Commands failing without proper GPIO initialization
+- **ADDED**: Automatic GPIO initialization when module not detected
+- **ENHANCED**: Seamless operation without user intervention
+
+#### ✅ **Technical Implementation**
+- **ENHANCED**: XM125Radar struct with gpio_pins field for CLI-configured pins
+- **UPDATED**: XM125Radar::new() to accept GPIO pins parameter  
+- **FIXED**: get_status() and get_info() to call connect() if not connected
+- **IMPROVED**: reset_xm125_to_run_mode() uses CLI pins instead of defaults
+- **CORRECTED**: firmware.rs to pass GPIO pins to radar constructor
+
+#### 🚀 **Hardware Verification Complete**
+- **VERIFIED**: Status command automatically initializes GPIO when needed
+- **CONFIRMED**: Exports GPIO124 (Reset), GPIO125 (MCU Int), GPIO139 (Wake), GPIO141 (Boot)
+- **TESTED**: Proper hardware reset sequence to RUN mode
+- **VALIDATED**: All commands work seamlessly after reboot scenario
+
+#### 🔧 **Key Features Added**
+- **AUTO-DETECTION**: Detects when module not available on I2C bus
+- **TRANSPARENT**: GPIO initialization without user intervention
+- **CLI-AWARE**: Uses CLI-configured GPIO pins (respects --gpio-* options)
+- **COMPATIBLE**: Maintains full 7m range and profile mode selection
+- **ROBUST**: Post-reboot ready operation
+
 ## [2.0.5] - 2025-10-24
 
 ### 🎛️ **PROFILE MODE SELECTION**
