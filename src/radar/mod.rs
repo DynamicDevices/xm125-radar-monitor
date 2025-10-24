@@ -74,6 +74,7 @@ impl Default for XM125Config {
 pub struct XM125Radar {
     i2c: I2cDevice,
     pub config: XM125Config,
+    gpio_pins: XM125GpioPins,
     is_connected: bool,
     is_calibrated: bool,
     last_calibration: Option<Instant>,
@@ -82,10 +83,11 @@ pub struct XM125Radar {
 }
 
 impl XM125Radar {
-    pub fn new(i2c: I2cDevice) -> Self {
+    pub fn new(i2c: I2cDevice, gpio_pins: XM125GpioPins) -> Self {
         Self {
             i2c,
             config: XM125Config::default(),
+            gpio_pins,
             is_connected: false,
             is_calibrated: false,
             last_calibration: None,
@@ -136,9 +138,8 @@ impl XM125Radar {
     fn reset_xm125_to_run_mode(&self) -> Result<()> {
         info!("Executing XM125 reset to run mode using internal GPIO control...");
 
-        // Create GPIO controller with default pins (can be overridden via CLI)
-        let pins = XM125GpioPins::default();
-        let mut gpio_controller = XM125GpioController::with_pins(pins);
+        // Create GPIO controller with CLI-configured pins
+        let mut gpio_controller = XM125GpioController::with_pins(self.gpio_pins);
 
         // Initialize GPIO pins
         gpio_controller
@@ -171,6 +172,11 @@ impl XM125Radar {
 
     /// Get formatted status string
     pub fn get_status(&mut self) -> Result<String> {
+        // Ensure we're connected (this will trigger GPIO initialization if needed)
+        if !self.is_connected {
+            self.connect()?;
+        }
+
         let status = self.get_status_raw()?;
 
         let mut status_parts = Vec::new();
@@ -201,6 +207,11 @@ impl XM125Radar {
 
     /// Get device information
     pub fn get_info(&mut self) -> Result<String> {
+        // Ensure we're connected (this will trigger GPIO initialization if needed)
+        if !self.is_connected {
+            self.connect()?;
+        }
+
         let version_data = self.i2c.read_register(REG_VERSION, 4)?;
         let version = u32::from_be_bytes([
             version_data[0],

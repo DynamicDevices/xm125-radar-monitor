@@ -80,9 +80,10 @@ async fn run(cli: Cli) -> Result<(), RadarError> {
         println!();
     }
 
-    // Initialize I2C and radar
+    // Initialize I2C and radar with GPIO pins
     let i2c_device = i2c::I2cDevice::new(&cli.get_i2c_device_path(), cli.i2c_address)?;
-    let mut radar = XM125Radar::new(i2c_device);
+    let gpio_pins = cli.get_gpio_pins();
+    let mut radar = XM125Radar::new(i2c_device, gpio_pins);
 
     // Execute the command
     execute_command(&cli, &mut radar).await?;

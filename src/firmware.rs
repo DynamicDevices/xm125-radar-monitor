@@ -294,7 +294,8 @@ impl FirmwareManager {
         // Create a temporary radar instance to read the application ID
         let i2c_device_path = "/dev/i2c-2".to_string();
         let i2c_device = crate::i2c::I2cDevice::new(&i2c_device_path, self.i2c_address)?;
-        let mut radar = crate::radar::XM125Radar::new(i2c_device);
+        let gpio_pins = crate::gpio::XM125GpioPins::default(); // Use default pins for firmware operations
+        let mut radar = crate::radar::XM125Radar::new(i2c_device, gpio_pins);
 
         // Try to connect and read application ID using our radar interface
         match radar.connect() {
