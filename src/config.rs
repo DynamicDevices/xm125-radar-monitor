@@ -130,7 +130,7 @@ pub fn configure_presence_parameters(
 pub fn debug_registers_if_connected(radar: &mut XM125Radar, mode: &str) {
     if radar.is_connected() {
         match radar.debug_registers(mode) {
-            Ok(_) => info!("✅ Register debugging completed successfully"),
+            Ok(()) => info!("✅ Register debugging completed successfully"),
             Err(e) => {
                 eprintln!("❌ Failed to debug registers: {e}");
                 warn!("Register debugging failed, but continuing with measurement");

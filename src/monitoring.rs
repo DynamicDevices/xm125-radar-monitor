@@ -31,7 +31,7 @@ pub async fn monitor_distance_continuous(
 
     // Setup progress bar
     let progress = if !cli.quiet && count.is_some() {
-        let pb = ProgressBar::new(total_measurements as u64);
+        let pb = ProgressBar::new(u64::from(total_measurements));
         pb.set_style(
             ProgressStyle::default_bar()
                 .template(
@@ -54,7 +54,7 @@ pub async fn monitor_distance_continuous(
 
         // Write CSV header
         writer
-            .write_record(&[
+            .write_record([
                 "timestamp",
                 "distance_m",
                 "signal_strength",
@@ -70,12 +70,9 @@ pub async fn monitor_distance_continuous(
 
     info!("🚀 Starting continuous distance monitoring...");
     if let Some(count) = count {
-        info!("📊 Taking {} measurements every {}ms", count, interval);
+        info!("📊 Taking {count} measurements every {interval}ms");
     } else {
-        info!(
-            "📊 Continuous monitoring every {}ms (Ctrl+C to stop)",
-            interval
-        );
+        info!("📊 Continuous monitoring every {interval}ms (Ctrl+C to stop)");
     }
 
     while measurement_count < total_measurements {
@@ -90,7 +87,7 @@ pub async fn monitor_distance_continuous(
         // CSV output
         if let Some(ref mut writer) = csv_writer {
             writer
-                .write_record(&[
+                .write_record([
                     &timestamp_full,
                     &format!("{:.3}", result.distance),
                     &format!("{:.1}", result.strength),
@@ -113,7 +110,7 @@ pub async fn monitor_distance_continuous(
 
         // Update progress bar
         if let Some(ref pb) = progress {
-            pb.set_position(measurement_count as u64);
+            pb.set_position(u64::from(measurement_count));
         }
 
         // Break if we've reached the count
@@ -139,6 +136,7 @@ pub async fn monitor_distance_continuous(
 }
 
 /// Monitor presence detection continuously
+#[allow(clippy::too_many_lines)]
 pub async fn monitor_presence_continuous(
     radar: &mut XM125Radar,
     cli: &Cli,
@@ -152,7 +150,7 @@ pub async fn monitor_presence_continuous(
 
     // Setup progress bar
     let progress = if !cli.quiet && count.is_some() {
-        let pb = ProgressBar::new(total_measurements as u64);
+        let pb = ProgressBar::new(u64::from(total_measurements));
         pb.set_style(
             ProgressStyle::default_bar()
                 .template(
@@ -175,7 +173,7 @@ pub async fn monitor_presence_continuous(
 
         // Write CSV header
         writer
-            .write_record(&[
+            .write_record([
                 "timestamp",
                 "measurement_number",
                 "presence_detected",
@@ -195,12 +193,9 @@ pub async fn monitor_presence_continuous(
 
     info!("🚀 Starting continuous presence monitoring...");
     if let Some(count) = count {
-        info!("📊 Taking {} measurements every {}ms", count, interval);
+        info!("📊 Taking {count} measurements every {interval}ms");
     } else {
-        info!(
-            "📊 Continuous monitoring every {}ms (Ctrl+C to stop)",
-            interval
-        );
+        info!("📊 Continuous monitoring every {interval}ms (Ctrl+C to stop)");
     }
 
     while measurement_count < total_measurements {
@@ -238,7 +233,7 @@ pub async fn monitor_presence_continuous(
             };
 
             writer
-                .write_record(&[
+                .write_record([
                     &timestamp_full,
                     &measurement_count.to_string(),
                     &result.presence_detected.to_string(),
@@ -263,7 +258,7 @@ pub async fn monitor_presence_continuous(
 
         // Update progress bar
         if let Some(ref pb) = progress {
-            pb.set_position(measurement_count as u64);
+            pb.set_position(u64::from(measurement_count));
         }
 
         // Break if we've reached the count
