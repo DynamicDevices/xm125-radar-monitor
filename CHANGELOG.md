@@ -2,70 +2,42 @@
 
 ## [2.0.9] - 2025-01-25
 
-### 📋 **TESTING STATUS DOCUMENTATION & CODE QUALITY RELEASE**
+### 📋 **TESTING STATUS DOCUMENTATION RELEASE**
 
-#### 🎯 **Primary Focus: Production Readiness & Transparency**
+#### 🎯 **Primary Focus: Production Readiness Transparency**
 
-This release focuses on **code quality improvements** and **clear testing status documentation** to ensure users have accurate information about which features are production-ready.
+This release focuses on **clear testing status documentation** to ensure users have accurate information about which features are production-ready vs untested.
 
-#### ✨ **New Documentation Features**
+#### ✨ **Documentation Updates**
 - **ADDED**: Comprehensive testing status indicators across all documentation
 - **ADDED**: Clear warnings in CLI help text about untested modes
 - **ADDED**: Production readiness guidance for each firmware mode
 - **ADDED**: Risk assessment for untested features
-
-#### 🔧 **Code Quality Improvements** 
-- **FIXED**: All high-priority Clippy lints without suppressions
-- **REFACTORED**: Large functions broken into focused, testable components
-- **IMPROVED**: Explicit imports replacing wildcard imports for better clarity
-- **ENHANCED**: CLI argument organization with logical grouping
+- **FIXED**: Detection modes status table to accurately reflect testing status
 
 #### 📊 **Testing Status Clarification**
 - **✅ PRESENCE DETECTION**: Fully tested, 7m range verified, production-ready
 - **⚠️ DISTANCE DETECTION**: Code complete, firmware ready, but untested
 - **⚠️ BREATHING MONITOR**: Code complete, firmware ready, but untested
 
-#### 🏗️ **Architecture Improvements**
-- **MODULAR**: Better separation of concerns across modules
-- **MAINTAINABLE**: Smaller, focused functions (eliminated `too_many_lines`)
-- **CLEAR**: Explicit dependencies and imports
-- **ORGANIZED**: Logical CLI argument grouping
-
-#### 🚀 **Quality Metrics**
-- **Zero** lint suppressions (`#[allow]` attributes)
-- **Zero** Clippy warnings in standard configuration
-- **100%** test pass rate
-- **Clean** CI/CD pipeline with comprehensive checks
+#### 🔧 **Documentation Fixes**
+- **CORRECTED**: Detection modes status table in PROJECT_CONTEXT.md
+- **ALIGNED**: All documentation to consistently reflect actual testing status
+- **ENHANCED**: User guidance for production deployment decisions
 
 #### 📈 **Benefits for Users**
 - **Clear expectations** about feature reliability
 - **Informed decision making** for production deployment
-- **Better code maintainability** for future development
-- **Professional quality** following Rust best practices
+- **Honest assessment** of current development status
+- **Transparent communication** about testing priorities
+
+**Note**: Code quality improvements (lint fixes, refactoring, explicit imports) were completed in earlier releases (v2.0.8 and prior commits). This release focuses solely on documentation accuracy and testing status transparency.
 
 ---
 
-## [2.0.8] - 2025-01-25 (Updated)
+## [2.0.8] - 2025-01-25
 
-### 📋 **DOCUMENTATION UPDATE - TESTING STATUS CLARIFICATION**
-
-#### 📝 **Documentation Changes**
-- **ADDED**: Clear testing status indicators in README.md and PROJECT_CONTEXT.md
-- **ADDED**: Testing status warning in CLI help text
-- **CLARIFIED**: Presence detection mode is fully tested and production-ready
-- **CLARIFIED**: Distance and breathing modes are implemented but untested
-- **NOTED**: Untested modes should be used with caution in production
-
-#### ⚠️ **Testing Status Summary**
-- **✅ Presence Detection**: Fully validated, 7m range verified, production-ready
-- **⚠️ Distance Detection**: Code complete, firmware support ready, but untested
-- **⚠️ Breathing Monitor**: Code complete, firmware support ready, but untested
-
----
-
-## [2.0.8] - 2025-01-25 (Original)
-
-### 🔄 **FIFO INTEGRATION - SPI-LIB COMPATIBILITY**
+### 🔄 **FIFO INTEGRATION & CODE QUALITY IMPROVEMENTS**
 
 #### ✨ **New Features**
 - **ADDED**: Complete FIFO output system compatible with spi-lib (BGT60TR13C) readers
@@ -74,6 +46,12 @@ This release focuses on **code quality improvements** and **clear testing status
 - **ADDED**: `--fifo-interval` timing control: 5.0s default (spi-lib compatible), 0=real-time
 - **ADDED**: `--fifo-path` for custom FIFO locations
 
+#### 🔧 **Code Quality Improvements** 
+- **FIXED**: All high-priority Clippy lints without suppressions
+- **REFACTORED**: Large functions broken into focused, testable components
+- **IMPROVED**: Explicit imports replacing wildcard imports for better clarity
+- **ENHANCED**: CLI argument organization with logical grouping
+
 #### 🎯 **Drop-in Replacement Capability**
 - **COMPATIBLE**: Exact same FIFO path (`/tmp/presence`) as spi-lib
 - **COMPATIBLE**: Same 5.0 second update interval as BGT60TR13C
@@ -81,29 +59,13 @@ This release focuses on **code quality improvements** and **clear testing status
 - **COMPATIBLE**: Same status messages (`STATUS Starting up`, `STATUS App exit`)
 - **COMPATIBLE**: Identical FIFO mechanics (O_NONBLOCK, open-write-close pattern)
 
-#### 🔧 **Technical Implementation**
-- **ROBUST**: Non-blocking FIFO writes with graceful no-reader handling
-- **FLEXIBLE**: Real-time mode (interval=0) for applications needing every measurement
-- **ENHANCED**: JSON format provides rich XM125 data (scores, confidence, timestamps)
-- **EFFICIENT**: Timing-controlled writes prevent FIFO flooding
+#### 🚀 **Quality Metrics**
+- **Zero** lint suppressions (`#[allow]` attributes)
+- **Zero** Clippy warnings in standard configuration
+- **100%** test pass rate
+- **Clean** CI/CD pipeline with comprehensive checks
 
-#### 📊 **Usage Examples**
-```bash
-# Drop-in spi-lib replacement (default behavior)
-sudo xm125-radar-monitor presence --continuous --fifo-output --fifo-format simple
-
-# Real-time JSON mode
-sudo xm125-radar-monitor presence --continuous --fifo-output --fifo-interval 0
-
-# Combined with existing features
-sudo xm125-radar-monitor presence --min-range 0.5 --max-range 7.0 --continuous --fifo-output --save-to data.csv
-```
-
-#### 🚀 **Impact**
-- **ENABLES**: Seamless migration from BGT60TR13C to XM125 radar systems
-- **MAINTAINS**: All existing downstream applications reading `/tmp/presence`
-- **ENHANCES**: 7m detection range vs BGT's shorter range
-- **PROVIDES**: Rich JSON data format for advanced applications
+---
 
 ## [2.0.7] - 2025-10-24
 
