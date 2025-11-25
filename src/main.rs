@@ -147,8 +147,6 @@ async fn execute_command(
                     println!("📡 XM125 Status: {status}");
                 }
             }
-            Ok(())
-            }
         }
 
         Commands::Info => {
@@ -166,8 +164,6 @@ async fn execute_command(
                     println!("🔍 XM125 Device Information:");
                     println!("{info}");
                 }
-            }
-            Ok(())
             }
         }
 
@@ -209,8 +205,6 @@ async fn execute_command(
                 if let Some(writer) = fifo_writer {
                     write_distance_to_fifo(writer, &result, &cli.fifo_format);
                 }
-            }
-            Ok(())
             }
         }
 
@@ -264,21 +258,18 @@ async fn execute_command(
                     write_presence_to_fifo(writer, &result, &cli.fifo_format);
                 }
             }
-            Ok(())
-            }
         }
 
         Commands::Firmware { action } => {
             handle_firmware_action(radar, action, &cli.firmware_path).await?;
         }
-    }
-    Ok(())
 
         Commands::Gpio { .. } => {
             // GPIO commands are handled earlier, this should not be reached
             unreachable!("GPIO commands should be handled before I2C initialization");
         }
     }
+    Ok(())
 }
 
 /// Configure distance measurement range
