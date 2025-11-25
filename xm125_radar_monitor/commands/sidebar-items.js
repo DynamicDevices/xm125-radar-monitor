@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["execute_command"]};
+window.SIDEBAR_ITEMS = {"fn":["execute_command","handle_distance_command","handle_info_command","handle_presence_command","handle_status_command"],"struct":["DistanceParams","PresenceParams"]};
