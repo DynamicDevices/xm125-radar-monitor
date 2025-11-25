@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["configure_distance_range","configure_presence_parameters","debug_registers_if_connected"]};

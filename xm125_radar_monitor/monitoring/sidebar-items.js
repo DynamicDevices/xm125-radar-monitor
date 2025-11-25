@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["monitor_distance_continuous","monitor_presence_continuous"]};

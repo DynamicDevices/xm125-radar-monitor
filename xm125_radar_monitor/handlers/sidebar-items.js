@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["handle_bootloader_command","handle_firmware_action","handle_firmware_checksum_command","handle_firmware_erase_command","handle_gpio_command"]};
