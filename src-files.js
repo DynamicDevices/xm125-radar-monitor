@@ -1,2 +1,2 @@
-createSrcSidebar('[["xm125_radar_monitor",["",[["radar",[],["debug.rs","distance.rs","mod.rs","presence.rs","registers.rs"]]],["cli.rs","error.rs","firmware.rs","gpio.rs","i2c.rs","main.rs"]]]]');
-//{"start":19,"fragment_lengths":[173]}
+createSrcSidebar('[["xm125_radar_monitor",["",[["radar",[],["debug.rs","distance.rs","mod.rs","presence.rs","registers.rs"]]],["cli.rs","error.rs","fifo.rs","firmware.rs","gpio.rs","i2c.rs","main.rs"]]]]');
+//{"start":19,"fragment_lengths":[183]}
