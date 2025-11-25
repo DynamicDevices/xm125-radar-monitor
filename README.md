@@ -7,7 +7,7 @@
 
 Production-ready CLI tool for Acconeer XM125 radar modules with verified 7m detection range and comprehensive configuration control.
 
-**Version**: 2.0.8  
+**Version**: 2.0.9  
 **Maintainer**: Alex J Lennon (ajlennon@dynamicdevices.co.uk)  
 **Copyright**: © 2025 Dynamic Devices Ltd. All rights reserved.
 

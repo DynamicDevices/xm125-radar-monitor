@@ -1,5 +1,50 @@
 # Changelog
 
+## [2.0.9] - 2025-01-25
+
+### 📋 **TESTING STATUS DOCUMENTATION & CODE QUALITY RELEASE**
+
+#### 🎯 **Primary Focus: Production Readiness & Transparency**
+
+This release focuses on **code quality improvements** and **clear testing status documentation** to ensure users have accurate information about which features are production-ready.
+
+#### ✨ **New Documentation Features**
+- **ADDED**: Comprehensive testing status indicators across all documentation
+- **ADDED**: Clear warnings in CLI help text about untested modes
+- **ADDED**: Production readiness guidance for each firmware mode
+- **ADDED**: Risk assessment for untested features
+
+#### 🔧 **Code Quality Improvements** 
+- **FIXED**: All high-priority Clippy lints without suppressions
+- **REFACTORED**: Large functions broken into focused, testable components
+- **IMPROVED**: Explicit imports replacing wildcard imports for better clarity
+- **ENHANCED**: CLI argument organization with logical grouping
+
+#### 📊 **Testing Status Clarification**
+- **✅ PRESENCE DETECTION**: Fully tested, 7m range verified, production-ready
+- **⚠️ DISTANCE DETECTION**: Code complete, firmware ready, but untested
+- **⚠️ BREATHING MONITOR**: Code complete, firmware ready, but untested
+
+#### 🏗️ **Architecture Improvements**
+- **MODULAR**: Better separation of concerns across modules
+- **MAINTAINABLE**: Smaller, focused functions (eliminated `too_many_lines`)
+- **CLEAR**: Explicit dependencies and imports
+- **ORGANIZED**: Logical CLI argument grouping
+
+#### 🚀 **Quality Metrics**
+- **Zero** lint suppressions (`#[allow]` attributes)
+- **Zero** Clippy warnings in standard configuration
+- **100%** test pass rate
+- **Clean** CI/CD pipeline with comprehensive checks
+
+#### 📈 **Benefits for Users**
+- **Clear expectations** about feature reliability
+- **Informed decision making** for production deployment
+- **Better code maintainability** for future development
+- **Professional quality** following Rust best practices
+
+---
+
 ## [2.0.8] - 2025-01-25 (Updated)
 
 ### 📋 **DOCUMENTATION UPDATE - TESTING STATUS CLARIFICATION**

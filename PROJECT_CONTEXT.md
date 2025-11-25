@@ -1,6 +1,6 @@
 # XM125 Radar Monitor - Project Context
 
-**Version**: v2.0.8  
+**Version**: v2.0.9  
 **Status**: Production Ready  
 **Last Updated**: January 2025
 
