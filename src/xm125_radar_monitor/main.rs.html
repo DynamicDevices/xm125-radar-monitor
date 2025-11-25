@@ -34,7 +34,7 @@
 <a href=#34 id=34 data-nosnippet>34</a>    <span class="kw">let </span>cli = Cli::parse();
 <a href=#35 id=35 data-nosnippet>35</a>
 <a href=#36 id=36 data-nosnippet>36</a>    <span class="comment">// Initialize logging
-<a href=#37 id=37 data-nosnippet>37</a>    </span><span class="kw">if </span>cli.verbose {
+<a href=#37 id=37 data-nosnippet>37</a>    </span><span class="kw">if </span>cli.logging.verbose {
 <a href=#38 id=38 data-nosnippet>38</a>        env::set_var(<span class="string">"RUST_LOG"</span>, <span class="string">"debug"</span>);
 <a href=#39 id=39 data-nosnippet>39</a>    } <span class="kw">else </span>{
 <a href=#40 id=40 data-nosnippet>40</a>        env::set_var(<span class="string">"RUST_LOG"</span>, <span class="string">"info"</span>);
@@ -78,7 +78,7 @@
 <a href=#78 id=78 data-nosnippet>78</a>    </span>}
 <a href=#79 id=79 data-nosnippet>79</a>
 <a href=#80 id=80 data-nosnippet>80</a>    <span class="comment">// Print startup banner unless quiet mode
-<a href=#81 id=81 data-nosnippet>81</a>    </span><span class="kw">if </span>!cli.quiet {
+<a href=#81 id=81 data-nosnippet>81</a>    </span><span class="kw">if </span>!cli.output.quiet {
 <a href=#82 id=82 data-nosnippet>82</a>        <span class="macro">println!</span>(<span class="string">"xm125-radar-monitor v{}"</span>, <span class="macro">env!</span>(<span class="string">"CARGO_PKG_VERSION"</span>));
 <a href=#83 id=83 data-nosnippet>83</a>        <span class="macro">println!</span>(<span class="string">"Copyright (c) 2025 Dynamic Devices Ltd. All rights reserved."</span>);
 <a href=#84 id=84 data-nosnippet>84</a>        <span class="macro">println!</span>(<span class="string">"XM125 Radar Module Monitor"</span>);
@@ -96,16 +96,16 @@
 <a href=#96 id=96 data-nosnippet>96</a>    <span class="kw">let </span><span class="kw-2">mut </span>radar = XM125Radar::new(i2c_device, gpio_pins);
 <a href=#97 id=97 data-nosnippet>97</a>
 <a href=#98 id=98 data-nosnippet>98</a>    <span class="comment">// Initialize FIFO writer if enabled
-<a href=#99 id=99 data-nosnippet>99</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>fifo_writer = <span class="kw">if </span>cli.fifo_output {
-<a href=#100 id=100 data-nosnippet>100</a>        <span class="kw">match </span>FifoWriter::new(<span class="kw-2">&amp;</span>cli.fifo_path, cli.fifo_interval) {
+<a href=#99 id=99 data-nosnippet>99</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>fifo_writer = <span class="kw">if </span>cli.output.fifo_output {
+<a href=#100 id=100 data-nosnippet>100</a>        <span class="kw">match </span>FifoWriter::new(<span class="kw-2">&amp;</span>cli.output.fifo_path, cli.output.fifo_interval) {
 <a href=#101 id=101 data-nosnippet>101</a>            <span class="prelude-val">Ok</span>(writer) =&gt; {
-<a href=#102 id=102 data-nosnippet>102</a>                <span class="kw">if </span>cli.fifo_interval &gt; <span class="number">0.0 </span>{
+<a href=#102 id=102 data-nosnippet>102</a>                <span class="kw">if </span>cli.output.fifo_interval &gt; <span class="number">0.0 </span>{
 <a href=#103 id=103 data-nosnippet>103</a>                    <span class="macro">info!</span>(<span class="string">"FIFO output enabled: {} (format: {:?}, interval: {:.1}s - spi-lib compatible)"</span>, 
-<a href=#104 id=104 data-nosnippet>104</a>                          cli.fifo_path, cli.fifo_format, cli.fifo_interval);
+<a href=#104 id=104 data-nosnippet>104</a>                          cli.output.fifo_path, cli.output.fifo_format, cli.output.fifo_interval);
 <a href=#105 id=105 data-nosnippet>105</a>                } <span class="kw">else </span>{
 <a href=#106 id=106 data-nosnippet>106</a>                    <span class="macro">info!</span>(
 <a href=#107 id=107 data-nosnippet>107</a>                        <span class="string">"FIFO output enabled: {} (format: {:?}, real-time mode)"</span>,
-<a href=#108 id=108 data-nosnippet>108</a>                        cli.fifo_path, cli.fifo_format
+<a href=#108 id=108 data-nosnippet>108</a>                        cli.output.fifo_path, cli.output.fifo_format
 <a href=#109 id=109 data-nosnippet>109</a>                    );
 <a href=#110 id=110 data-nosnippet>110</a>                }
 <a href=#111 id=111 data-nosnippet>111</a>                <span class="comment">// Send startup status (same as spi-lib)

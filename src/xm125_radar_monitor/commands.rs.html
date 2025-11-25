@@ -94,7 +94,7 @@
 <a href=#94 id=94 data-nosnippet>94</a>    }
 <a href=#95 id=95 data-nosnippet>95</a>
 <a href=#96 id=96 data-nosnippet>96</a>    <span class="comment">// Debug registers if requested (global option)
-<a href=#97 id=97 data-nosnippet>97</a>    </span><span class="kw">if </span>cli.debug_registers {
+<a href=#97 id=97 data-nosnippet>97</a>    </span><span class="kw">if </span>cli.logging.debug_registers {
 <a href=#98 id=98 data-nosnippet>98</a>        debug_registers_if_connected(radar, <span class="string">"Distance"</span>);
 <a href=#99 id=99 data-nosnippet>99</a>    }
 <a href=#100 id=100 data-nosnippet>100</a>
@@ -110,11 +110,11 @@
 <a href=#110 id=110 data-nosnippet>110</a>        .<span class="kw">await</span><span class="question-mark">?</span>;
 <a href=#111 id=111 data-nosnippet>111</a>    } <span class="kw">else </span>{
 <a href=#112 id=112 data-nosnippet>112</a>        <span class="kw">let </span>result = radar.measure_distance().<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#113 id=113 data-nosnippet>113</a>        display_distance_result(<span class="kw-2">&amp;</span>result, <span class="kw-2">&amp;</span>cli.format);
+<a href=#113 id=113 data-nosnippet>113</a>        display_distance_result(<span class="kw-2">&amp;</span>result, <span class="kw-2">&amp;</span>cli.output.format);
 <a href=#114 id=114 data-nosnippet>114</a>
 <a href=#115 id=115 data-nosnippet>115</a>        <span class="comment">// Single measurement FIFO output
 <a href=#116 id=116 data-nosnippet>116</a>        </span><span class="kw">if let </span><span class="prelude-val">Some</span>(writer) = fifo_writer {
-<a href=#117 id=117 data-nosnippet>117</a>            write_distance_to_fifo(writer, <span class="kw-2">&amp;</span>result, <span class="kw-2">&amp;</span>cli.fifo_format);
+<a href=#117 id=117 data-nosnippet>117</a>            write_distance_to_fifo(writer, <span class="kw-2">&amp;</span>result, <span class="kw-2">&amp;</span>cli.output.fifo_format);
 <a href=#118 id=118 data-nosnippet>118</a>        }
 <a href=#119 id=119 data-nosnippet>119</a>    }
 <a href=#120 id=120 data-nosnippet>120</a>    <span class="prelude-val">Ok</span>(())
@@ -142,7 +142,7 @@
 <a href=#142 id=142 data-nosnippet>142</a>    )<span class="question-mark">?</span>;
 <a href=#143 id=143 data-nosnippet>143</a>
 <a href=#144 id=144 data-nosnippet>144</a>    <span class="comment">// Debug registers if requested (global option)
-<a href=#145 id=145 data-nosnippet>145</a>    </span><span class="kw">if </span>cli.debug_registers {
+<a href=#145 id=145 data-nosnippet>145</a>    </span><span class="kw">if </span>cli.logging.debug_registers {
 <a href=#146 id=146 data-nosnippet>146</a>        debug_registers_if_connected(radar, <span class="string">"Presence"</span>);
 <a href=#147 id=147 data-nosnippet>147</a>    }
 <a href=#148 id=148 data-nosnippet>148</a>
@@ -158,11 +158,11 @@
 <a href=#158 id=158 data-nosnippet>158</a>        .<span class="kw">await</span><span class="question-mark">?</span>;
 <a href=#159 id=159 data-nosnippet>159</a>    } <span class="kw">else </span>{
 <a href=#160 id=160 data-nosnippet>160</a>        <span class="kw">let </span>result = radar.measure_presence().<span class="kw">await</span><span class="question-mark">?</span>;
-<a href=#161 id=161 data-nosnippet>161</a>        display_presence_result(<span class="kw-2">&amp;</span>result, <span class="kw-2">&amp;</span>cli.format);
+<a href=#161 id=161 data-nosnippet>161</a>        display_presence_result(<span class="kw-2">&amp;</span>result, <span class="kw-2">&amp;</span>cli.output.format);
 <a href=#162 id=162 data-nosnippet>162</a>
 <a href=#163 id=163 data-nosnippet>163</a>        <span class="comment">// Single measurement FIFO output
 <a href=#164 id=164 data-nosnippet>164</a>        </span><span class="kw">if let </span><span class="prelude-val">Some</span>(writer) = fifo_writer {
-<a href=#165 id=165 data-nosnippet>165</a>            write_presence_to_fifo(writer, <span class="kw-2">&amp;</span>result, <span class="kw-2">&amp;</span>cli.fifo_format);
+<a href=#165 id=165 data-nosnippet>165</a>            write_presence_to_fifo(writer, <span class="kw-2">&amp;</span>result, <span class="kw-2">&amp;</span>cli.output.fifo_format);
 <a href=#166 id=166 data-nosnippet>166</a>        }
 <a href=#167 id=167 data-nosnippet>167</a>    }
 <a href=#168 id=168 data-nosnippet>168</a>    <span class="prelude-val">Ok</span>(())
@@ -177,12 +177,12 @@
 <a href=#177 id=177 data-nosnippet>177</a>    <span class="kw">match </span><span class="kw-2">&amp;</span>cli.command {
 <a href=#178 id=178 data-nosnippet>178</a>        Commands::Status =&gt; {
 <a href=#179 id=179 data-nosnippet>179</a>            <span class="kw">let </span>status = radar.get_status()<span class="question-mark">?</span>;
-<a href=#180 id=180 data-nosnippet>180</a>            handle_status_command(<span class="kw-2">&amp;</span>status, <span class="kw-2">&amp;</span>cli.format)<span class="question-mark">?</span>;
+<a href=#180 id=180 data-nosnippet>180</a>            handle_status_command(<span class="kw-2">&amp;</span>status, <span class="kw-2">&amp;</span>cli.output.format)<span class="question-mark">?</span>;
 <a href=#181 id=181 data-nosnippet>181</a>        }
 <a href=#182 id=182 data-nosnippet>182</a>
 <a href=#183 id=183 data-nosnippet>183</a>        Commands::Info =&gt; {
 <a href=#184 id=184 data-nosnippet>184</a>            <span class="kw">let </span>info = radar.get_info()<span class="question-mark">?</span>;
-<a href=#185 id=185 data-nosnippet>185</a>            handle_info_command(<span class="kw-2">&amp;</span>info, <span class="kw-2">&amp;</span>cli.format)<span class="question-mark">?</span>;
+<a href=#185 id=185 data-nosnippet>185</a>            handle_info_command(<span class="kw-2">&amp;</span>info, <span class="kw-2">&amp;</span>cli.output.format)<span class="question-mark">?</span>;
 <a href=#186 id=186 data-nosnippet>186</a>        }
 <a href=#187 id=187 data-nosnippet>187</a>
 <a href=#188 id=188 data-nosnippet>188</a>        Commands::Distance {
