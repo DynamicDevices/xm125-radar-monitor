@@ -130,7 +130,7 @@
 <a href=#130 id=130 data-nosnippet>130</a></span><span class="kw">pub fn </span>debug_registers_if_connected(radar: <span class="kw-2">&amp;mut </span>XM125Radar, mode: <span class="kw-2">&amp;</span>str) {
 <a href=#131 id=131 data-nosnippet>131</a>    <span class="kw">if </span>radar.is_connected() {
 <a href=#132 id=132 data-nosnippet>132</a>        <span class="kw">match </span>radar.debug_registers(mode) {
-<a href=#133 id=133 data-nosnippet>133</a>            <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; <span class="macro">info!</span>(<span class="string">"✅ Register debugging completed successfully"</span>),
+<a href=#133 id=133 data-nosnippet>133</a>            <span class="prelude-val">Ok</span>(()) =&gt; <span class="macro">info!</span>(<span class="string">"✅ Register debugging completed successfully"</span>),
 <a href=#134 id=134 data-nosnippet>134</a>            <span class="prelude-val">Err</span>(e) =&gt; {
 <a href=#135 id=135 data-nosnippet>135</a>                <span class="macro">eprintln!</span>(<span class="string">"❌ Failed to debug registers: {e}"</span>);
 <a href=#136 id=136 data-nosnippet>136</a>                <span class="macro">warn!</span>(<span class="string">"Register debugging failed, but continuing with measurement"</span>);

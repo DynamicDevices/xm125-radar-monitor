@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["monitor_distance_continuous","monitor_presence_continuous"]};
+window.SIDEBAR_ITEMS = {"fn":["calculate_signal_metrics","monitor_distance_continuous","monitor_presence_continuous","process_presence_measurement","setup_presence_csv_writer","setup_progress_bar"]};
