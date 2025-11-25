@@ -289,19 +289,20 @@ impl XM125Radar {
         )?;
 
         // Calculate final range values for hardware registers
-        let (final_start_mm, final_end_mm) = if let (Some(start_m), Some(length_m)) = (custom_start, custom_length) {
-            // Use custom range values
-            let start_mm = (start_m * 1000.0) as u32;
-            let end_mm = ((start_m + length_m) * 1000.0) as u32;
-            (start_mm, end_mm)
-        } else {
-            // Use preset range values
-            match self.config.presence_range {
-                presence::PresenceRange::Short => (60u32, 700u32),   // 0.06m - 0.7m
-                presence::PresenceRange::Medium => (200u32, 2000u32), // 0.2m - 2.0m  
-                presence::PresenceRange::Long => (300u32, 5500u32),   // 0.3m - 5.5m
-            }
-        };
+        let (final_start_mm, final_end_mm) =
+            if let (Some(start_m), Some(length_m)) = (custom_start, custom_length) {
+                // Use custom range values
+                let start_mm = (start_m * 1000.0) as u32;
+                let end_mm = ((start_m + length_m) * 1000.0) as u32;
+                (start_mm, end_mm)
+            } else {
+                // Use preset range values
+                match self.config.presence_range {
+                    presence::PresenceRange::Short => (60u32, 700u32), // 0.06m - 0.7m
+                    presence::PresenceRange::Medium => (200u32, 2000u32), // 0.2m - 2.0m
+                    presence::PresenceRange::Long => (300u32, 5500u32), // 0.3m - 5.5m
+                }
+            };
 
         presence_detector.configure_thresholds(
             self.config.intra_detection_threshold,
@@ -351,19 +352,20 @@ impl XM125Radar {
         )?;
 
         // Calculate final range values for hardware registers
-        let (final_start_mm, final_end_mm) = if let (Some(start_m), Some(length_m)) = (custom_start, custom_length) {
-            // Use custom range values
-            let start_mm = (start_m * 1000.0) as u32;
-            let end_mm = ((start_m + length_m) * 1000.0) as u32;
-            (start_mm, end_mm)
-        } else {
-            // Use preset range values
-            match self.config.presence_range {
-                presence::PresenceRange::Short => (60u32, 700u32),   // 0.06m - 0.7m
-                presence::PresenceRange::Medium => (200u32, 2000u32), // 0.2m - 2.0m  
-                presence::PresenceRange::Long => (300u32, 5500u32),   // 0.3m - 5.5m
-            }
-        };
+        let (final_start_mm, final_end_mm) =
+            if let (Some(start_m), Some(length_m)) = (custom_start, custom_length) {
+                // Use custom range values
+                let start_mm = (start_m * 1000.0) as u32;
+                let end_mm = ((start_m + length_m) * 1000.0) as u32;
+                (start_mm, end_mm)
+            } else {
+                // Use preset range values
+                match self.config.presence_range {
+                    presence::PresenceRange::Short => (60u32, 700u32), // 0.06m - 0.7m
+                    presence::PresenceRange::Medium => (200u32, 2000u32), // 0.2m - 2.0m
+                    presence::PresenceRange::Long => (300u32, 5500u32), // 0.3m - 5.5m
+                }
+            };
 
         // Pass the auto_profile_enabled config and range values to configure_thresholds
         presence_detector.configure_thresholds(

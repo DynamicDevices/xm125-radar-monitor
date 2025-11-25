@@ -95,15 +95,17 @@ async fn run(cli: Cli) -> Result<(), RadarError> {
                     info!("FIFO output enabled: {} (format: {:?}, interval: {:.1}s - spi-lib compatible)", 
                           cli.fifo_path, cli.fifo_format, cli.fifo_interval);
                 } else {
-                    info!("FIFO output enabled: {} (format: {:?}, real-time mode)", 
-                          cli.fifo_path, cli.fifo_format);
+                    info!(
+                        "FIFO output enabled: {} (format: {:?}, real-time mode)",
+                        cli.fifo_path, cli.fifo_format
+                    );
                 }
                 // Send startup status (same as spi-lib)
                 let _ = writer.write_status("Starting up");
                 Some(writer)
             }
             Err(e) => {
-                warn!("Failed to initialize FIFO writer: {}", e);
+                warn!("Failed to initialize FIFO writer: {e}");
                 None
             }
         }
@@ -118,13 +120,17 @@ async fn run(cli: Cli) -> Result<(), RadarError> {
     if let Some(ref writer) = fifo_writer {
         let _ = writer.write_status("App exit");
     }
-
+    
     Ok(())
 }
 
 /// Execute the main command logic
 #[allow(clippy::too_many_lines)]
-async fn execute_command(cli: &Cli, radar: &mut XM125Radar, fifo_writer: Option<&mut FifoWriter>) -> Result<(), RadarError> {
+async fn execute_command(
+    cli: &Cli,
+    radar: &mut XM125Radar,
+    fifo_writer: Option<&mut FifoWriter>,
+) -> Result<(), RadarError> {
     match &cli.command {
         Commands::Status => {
             let status = radar.get_status()?;
@@ -140,6 +146,8 @@ async fn execute_command(cli: &Cli, radar: &mut XM125Radar, fifo_writer: Option<
                 cli::OutputFormat::Human => {
                     println!("📡 XM125 Status: {status}");
                 }
+            }
+            Ok(())
             }
         }
 
@@ -158,6 +166,8 @@ async fn execute_command(cli: &Cli, radar: &mut XM125Radar, fifo_writer: Option<
                     println!("🔍 XM125 Device Information:");
                     println!("{info}");
                 }
+            }
+            Ok(())
             }
         }
 
@@ -182,16 +192,25 @@ async fn execute_command(cli: &Cli, radar: &mut XM125Radar, fifo_writer: Option<
             }
 
             if *continuous {
-                monitor_distance_continuous(radar, cli, *count, *interval, save_to.as_deref(), fifo_writer)
-                    .await?;
+                monitor_distance_continuous(
+                    radar,
+                    cli,
+                    *count,
+                    *interval,
+                    save_to.as_deref(),
+                    fifo_writer,
+                )
+                .await?;
             } else {
                 let result = radar.measure_distance().await?;
                 display_distance_result(&result, &cli.format);
-                
+
                 // Single measurement FIFO output
                 if let Some(writer) = fifo_writer {
-                    write_distance_to_fifo(writer, &result, &cli.fifo_format)?;
+                    write_distance_to_fifo(writer, &result, &cli.fifo_format);
                 }
+            }
+            Ok(())
             }
         }
 
@@ -227,30 +246,39 @@ async fn execute_command(cli: &Cli, radar: &mut XM125Radar, fifo_writer: Option<
             }
 
             if *continuous {
-                monitor_presence_continuous(radar, cli, *count, *interval, save_to.as_deref(), fifo_writer)
-                    .await?;
+                monitor_presence_continuous(
+                    radar,
+                    cli,
+                    *count,
+                    *interval,
+                    save_to.as_deref(),
+                    fifo_writer,
+                )
+                .await?;
             } else {
                 let result = radar.measure_presence().await?;
                 display_presence_result(&result, &cli.format);
-                
+
                 // Single measurement FIFO output
                 if let Some(writer) = fifo_writer {
-                    write_presence_to_fifo(writer, &result, &cli.fifo_format)?;
+                    write_presence_to_fifo(writer, &result, &cli.fifo_format);
                 }
+            }
+            Ok(())
             }
         }
 
         Commands::Firmware { action } => {
             handle_firmware_action(radar, action, &cli.firmware_path).await?;
         }
+    }
+    Ok(())
 
         Commands::Gpio { .. } => {
             // GPIO commands are handled earlier, this should not be reached
             unreachable!("GPIO commands should be handled before I2C initialization");
         }
     }
-
-    Ok(())
 }
 
 /// Configure distance measurement range
@@ -287,7 +315,6 @@ fn configure_distance_range(radar: &mut XM125Radar, range_str: &str) -> Result<(
     info!("🎯 Configuring distance range: {start:.2}m - {end:.2}m");
     radar.config.start_m = start;
     radar.config.length_m = end - start;
-
     Ok(())
 }
 
@@ -385,9 +412,8 @@ fn configure_presence_parameters(
         } else {
             info!("✅ Applied default presence configuration (long range: 0.5m - 7.0m)");
         }
-    }
-
     Ok(())
+    }
 }
 
 /// Debug registers if radar is connected, with automatic connection attempt
@@ -408,7 +434,7 @@ fn debug_registers_if_connected(radar: &mut XM125Radar, mode: &str) {
 
     if radar.is_connected() {
         match radar.debug_registers(mode) {
-            Ok(()) => info!("✅ Register debugging completed successfully"),
+            Ok(_) => info!("✅ Register debugging completed successfully"),
             Err(e) => {
                 eprintln!("❌ Failed to debug registers: {e}");
                 warn!("Failed to debug registers: {e}");
@@ -563,7 +589,7 @@ async fn monitor_distance_continuous(
 
                 // FIFO output
                 if let Some(ref mut writer) = fifo_writer {
-                    let _ = write_distance_to_fifo(writer, &result, &cli.fifo_format);
+                    write_distance_to_fifo(writer, &result, &cli.fifo_format);
                 }
 
                 // Check if we've reached the target count
@@ -592,8 +618,6 @@ async fn monitor_distance_continuous(
             println!("💾 Results saved to: {filename}");
         }
     }
-
-    Ok(())
 }
 
 /// Monitor presence detection continuously
@@ -753,14 +777,14 @@ async fn monitor_presence_continuous(
                         .map_err(|e| RadarError::DeviceError {
                             message: format!("Failed to write CSV record: {e}"),
                         })?;
-                    writer.flush()                        .map_err(|e| RadarError::DeviceError {
-                            message: format!("Failed to flush CSV writer: {e}"),
-                        })?;
+                    writer.flush().map_err(|e| RadarError::DeviceError {
+                        message: format!("Failed to flush CSV writer: {e}"),
+                    })?;
                 }
 
                 // FIFO output
                 if let Some(ref mut writer) = fifo_writer {
-                    let _ = write_presence_to_fifo(writer, &result, &cli.fifo_format);
+                    write_presence_to_fifo(writer, &result, &cli.fifo_format);
                 }
 
                 // Check if we've reached the target count
@@ -789,8 +813,6 @@ async fn monitor_presence_continuous(
             println!("💾 Results saved to: {filename}");
         }
     }
-
-    Ok(())
 }
 
 /// Handle firmware-related commands
@@ -829,7 +851,6 @@ async fn handle_firmware_action(
             unreachable!("These firmware commands should be handled before I2C initialization");
         }
     }
-    Ok(())
 }
 
 /// Handle firmware erase command
@@ -854,8 +875,6 @@ async fn handle_firmware_erase_command(confirm: bool) -> Result<(), RadarError> 
 
     println!("✅ Chip erase completed successfully");
     println!("   The XM125 module now needs firmware to be programmed before use.");
-
-    Ok(())
 }
 
 /// Handle firmware checksum command
@@ -908,7 +927,6 @@ fn handle_firmware_checksum_command(
             }
         }
     }
-    Ok(())
 }
 
 /// Handle bootloader command
@@ -937,8 +955,6 @@ async fn handle_bootloader_command(cli: &Cli, test_mode: bool) -> Result<(), Rad
         println!("   Ready for firmware programming with stm32flash");
         println!("   Use 'xm125-radar-monitor gpio reset-run' to return to normal mode");
     }
-
-    Ok(())
 }
 
 /// Handle GPIO commands
@@ -969,8 +985,6 @@ fn handle_gpio_command(cli: &Cli, action: &GpioAction) -> Result<(), RadarError>
             gpio_controller.test_bootloader_control()?;
         }
     }
-
-    Ok(())
 }
 
 /// Write distance measurement to FIFO with timing control
@@ -978,7 +992,7 @@ fn write_distance_to_fifo(
     writer: &mut FifoWriter,
     result: &radar::DistanceMeasurement,
     format: &fifo::FifoFormat,
-) -> Result<(), RadarError> {
+) {
     match format {
         fifo::FifoFormat::Simple => {
             // Simple format: presence_state (always 1 for distance) and distance
@@ -996,7 +1010,6 @@ fn write_distance_to_fifo(
             let _ = writer.write_timed_json(&json_data);
         }
     }
-    Ok(())
 }
 
 /// Write presence measurement to FIFO with timing control
@@ -1004,11 +1017,11 @@ fn write_presence_to_fifo(
     writer: &mut FifoWriter,
     result: &radar::PresenceMeasurement,
     format: &fifo::FifoFormat,
-) -> Result<(), RadarError> {
+) {
     match format {
         fifo::FifoFormat::Simple => {
             // BGT60TR13C compatible format: presence_state (0/1) and distance
-            let presence_state = if result.presence_detected { 1 } else { 0 };
+            let presence_state = i32::from(result.presence_detected);
             let _ = writer.write_timed_simple(presence_state, result.presence_distance);
         }
         fifo::FifoFormat::Json => {
@@ -1039,5 +1052,4 @@ fn write_presence_to_fifo(
             let _ = writer.write_timed_json(&json_data);
         }
     }
-    Ok(())
 }

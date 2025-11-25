@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand, ValueEnum};
 
-use crate::firmware;
 use crate::fifo;
+use crate::firmware;
 
 /// Parse I2C address from string, supporting both decimal and hex formats
 fn parse_i2c_address(s: &str) -> Result<u16, String> {
@@ -102,6 +102,7 @@ All measurement commands automatically handle connection, firmware detection, an
 Use --verbose for detailed I2C transaction logs and --debug-registers to compare with evaluation tools.
 "
 )]
+#[allow(clippy::struct_excessive_bools)]
 pub struct Cli {
     /// I2C bus number (will be used as /dev/i2c-N if --i2c-device not specified)
     #[arg(
@@ -186,7 +187,10 @@ pub struct Cli {
     pub firmware_path: String,
 
     /// Enable FIFO output (compatible with spi-lib readers)
-    #[arg(long, help = "Enable FIFO output to /tmp/presence for compatibility with existing readers")]
+    #[arg(
+        long,
+        help = "Enable FIFO output to /tmp/presence for compatibility with existing readers"
+    )]
     pub fifo_output: bool,
 
     /// FIFO output path

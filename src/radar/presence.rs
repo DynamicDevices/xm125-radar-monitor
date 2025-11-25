@@ -145,13 +145,23 @@ impl<'a> PresenceDetector<'a> {
         let frame_rate_scaled = (frame_rate * 1000.0) as u32;
 
         // CRITICAL: Write Start Point and End Point registers with custom range values
-        info!("Writing Start Point register (0x{:04X}): {}mm ({:.1}m)", 
-              PRESENCE_REG_START_ADDRESS, start_mm, start_mm as f32 / 1000.0);
-        self.i2c.write_register(PRESENCE_REG_START_ADDRESS, &start_mm.to_be_bytes())?;
-        
-        info!("Writing End Point register (0x{:04X}): {}mm ({:.1}m)", 
-              PRESENCE_REG_END_ADDRESS, end_mm, end_mm as f32 / 1000.0);
-        self.i2c.write_register(PRESENCE_REG_END_ADDRESS, &end_mm.to_be_bytes())?;
+        info!(
+            "Writing Start Point register (0x{:04X}): {}mm ({:.1}m)",
+            PRESENCE_REG_START_ADDRESS,
+            start_mm,
+            start_mm as f32 / 1000.0
+        );
+        self.i2c
+            .write_register(PRESENCE_REG_START_ADDRESS, &start_mm.to_be_bytes())?;
+
+        info!(
+            "Writing End Point register (0x{:04X}): {}mm ({:.1}m)",
+            PRESENCE_REG_END_ADDRESS,
+            end_mm,
+            end_mm as f32 / 1000.0
+        );
+        self.i2c
+            .write_register(PRESENCE_REG_END_ADDRESS, &end_mm.to_be_bytes())?;
 
         // Configure Auto Profile based on user preference
         if auto_profile_enabled {
