@@ -94,7 +94,7 @@ async fn handle_distance_command(
     }
 
     // Debug registers if requested (global option)
-    if cli.debug_registers {
+    if cli.logging.debug_registers {
         debug_registers_if_connected(radar, "Distance");
     }
 
@@ -110,11 +110,11 @@ async fn handle_distance_command(
         .await?;
     } else {
         let result = radar.measure_distance().await?;
-        display_distance_result(&result, &cli.format);
+        display_distance_result(&result, &cli.output.format);
 
         // Single measurement FIFO output
         if let Some(writer) = fifo_writer {
-            write_distance_to_fifo(writer, &result, &cli.fifo_format);
+            write_distance_to_fifo(writer, &result, &cli.output.fifo_format);
         }
     }
     Ok(())
@@ -142,7 +142,7 @@ async fn handle_presence_command(
     )?;
 
     // Debug registers if requested (global option)
-    if cli.debug_registers {
+    if cli.logging.debug_registers {
         debug_registers_if_connected(radar, "Presence");
     }
 
@@ -158,11 +158,11 @@ async fn handle_presence_command(
         .await?;
     } else {
         let result = radar.measure_presence().await?;
-        display_presence_result(&result, &cli.format);
+        display_presence_result(&result, &cli.output.format);
 
         // Single measurement FIFO output
         if let Some(writer) = fifo_writer {
-            write_presence_to_fifo(writer, &result, &cli.fifo_format);
+            write_presence_to_fifo(writer, &result, &cli.output.fifo_format);
         }
     }
     Ok(())
@@ -177,12 +177,12 @@ pub async fn execute_command(
     match &cli.command {
         Commands::Status => {
             let status = radar.get_status()?;
-            handle_status_command(&status, &cli.format)?;
+            handle_status_command(&status, &cli.output.format)?;
         }
 
         Commands::Info => {
             let info = radar.get_info()?;
-            handle_info_command(&info, &cli.format)?;
+            handle_info_command(&info, &cli.output.format)?;
         }
 
         Commands::Distance {

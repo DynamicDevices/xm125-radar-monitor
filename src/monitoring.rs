@@ -30,7 +30,7 @@ pub async fn monitor_distance_continuous(
     let mut measurement_count = 0u32;
 
     // Setup progress bar
-    let progress = if !cli.quiet && count.is_some() {
+    let progress = if !cli.output.quiet && count.is_some() {
         let pb = ProgressBar::new(u64::from(total_measurements));
         pb.set_style(
             ProgressStyle::default_bar()
@@ -80,8 +80,8 @@ pub async fn monitor_distance_continuous(
         let timestamp_full = Utc::now().format("%Y-%m-%d %H:%M:%S%.3f").to_string();
 
         // Display result unless quiet mode
-        if !cli.quiet {
-            display_distance_result(&result, &cli.format);
+        if !cli.output.quiet {
+            display_distance_result(&result, &cli.output.format);
         }
 
         // CSV output
@@ -103,7 +103,7 @@ pub async fn monitor_distance_continuous(
 
         // FIFO output
         if let Some(ref mut writer) = fifo_writer {
-            write_distance_to_fifo(writer, &result, &cli.fifo_format);
+            write_distance_to_fifo(writer, &result, &cli.output.fifo_format);
         }
 
         measurement_count += 1;
@@ -137,7 +137,7 @@ pub async fn monitor_distance_continuous(
 
 /// Setup progress bar for monitoring operations
 fn setup_progress_bar(cli: &Cli, count: Option<u32>) -> Option<ProgressBar> {
-    if !cli.quiet && count.is_some() {
+    if !cli.output.quiet && count.is_some() {
         let total_measurements = count.unwrap_or(u32::MAX);
         let pb = ProgressBar::new(u64::from(total_measurements));
         pb.set_style(
@@ -219,8 +219,8 @@ fn process_presence_measurement(
     fifo_writer: &mut Option<&mut FifoWriter>,
 ) -> Result<(), RadarError> {
     // Display result unless quiet mode
-    if !cli.quiet {
-        display_presence_result(result, &cli.format);
+    if !cli.output.quiet {
+        display_presence_result(result, &cli.output.format);
     }
 
     // CSV output
@@ -248,7 +248,7 @@ fn process_presence_measurement(
 
     // FIFO output
     if let Some(ref mut writer) = fifo_writer {
-        write_presence_to_fifo(writer, result, &cli.fifo_format);
+        write_presence_to_fifo(writer, result, &cli.output.fifo_format);
     }
 
     Ok(())

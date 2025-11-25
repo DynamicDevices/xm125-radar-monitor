@@ -3,6 +3,61 @@ use clap::{Parser, Subcommand, ValueEnum};
 use crate::fifo;
 use crate::firmware;
 
+/// Logging and debug configuration
+#[derive(Parser, Debug, Clone)]
+pub struct LoggingArgs {
+    /// Enable verbose debug logging (shows I2C transactions and internal state)
+    #[arg(short = 'v', long, help = "Enable verbose debug logging")]
+    pub verbose: bool,
+
+    /// Log all register values after configuration for comparison with evaluation tools
+    #[arg(long, help = "Debug register configuration (global option)")]
+    pub debug_registers: bool,
+}
+
+/// Output configuration and formatting
+#[derive(Parser, Debug, Clone)]
+pub struct OutputArgs {
+    /// Output format for measurement data
+    #[arg(short = 'f', long, default_value = "human", help = "Output format")]
+    pub format: OutputFormat,
+
+    /// Suppress startup banner and configuration info
+    #[arg(short = 'q', long, help = "Suppress startup messages")]
+    pub quiet: bool,
+
+    /// Enable FIFO output (compatible with spi-lib readers)
+    #[arg(
+        long,
+        help = "Enable FIFO output to /tmp/presence for compatibility with existing readers"
+    )]
+    pub fifo_output: bool,
+
+    /// FIFO output path
+    #[arg(
+        long,
+        default_value = "/tmp/presence",
+        help = "FIFO output path [default: /tmp/presence for spi-lib compatibility]"
+    )]
+    pub fifo_path: String,
+
+    /// FIFO output format
+    #[arg(
+        long,
+        default_value = "json",
+        help = "FIFO output format: 'simple' (BGT60TR13C compatible) or 'json' (enhanced)"
+    )]
+    pub fifo_format: fifo::FifoFormat,
+
+    /// FIFO output interval in seconds
+    #[arg(
+        long,
+        default_value = "5.0",
+        help = "FIFO output interval in seconds (5.0=spi-lib compatible, 0=every measurement)"
+    )]
+    pub fifo_interval: f32,
+}
+
 /// Parse I2C address from string, supporting both decimal and hex formats
 fn parse_i2c_address(s: &str) -> Result<u16, String> {
     if let Some(hex_str) = s.strip_prefix("0x") {
@@ -102,7 +157,6 @@ All measurement commands automatically handle connection, firmware detection, an
 Use --verbose for detailed I2C transaction logs and --debug-registers to compare with evaluation tools.
 "
 )]
-#[allow(clippy::struct_excessive_bools)]
 pub struct Cli {
     /// I2C bus number (will be used as /dev/i2c-N if --i2c-device not specified)
     #[arg(
@@ -130,21 +184,13 @@ pub struct Cli {
     )]
     pub timeout: u64,
 
-    /// Output format for measurement data
-    #[arg(short = 'f', long, default_value = "human", help = "Output format")]
-    pub format: OutputFormat,
+    /// Logging and debug configuration
+    #[command(flatten)]
+    pub logging: LoggingArgs,
 
-    /// Enable verbose debug logging (shows I2C transactions and internal state)
-    #[arg(short = 'v', long, help = "Enable verbose debug logging")]
-    pub verbose: bool,
-
-    /// Log all register values after configuration for comparison with evaluation tools
-    #[arg(long, help = "Debug register configuration (global option)")]
-    pub debug_registers: bool,
-
-    /// Suppress startup banner and configuration info
-    #[arg(short = 'q', long, help = "Suppress startup messages")]
-    pub quiet: bool,
+    /// Output configuration and formatting
+    #[command(flatten)]
+    pub output: OutputArgs,
 
     /// GPIO pin for XM125 reset control (active-low)
     #[arg(
@@ -185,37 +231,6 @@ pub struct Cli {
         help = "Directory containing firmware binaries"
     )]
     pub firmware_path: String,
-
-    /// Enable FIFO output (compatible with spi-lib readers)
-    #[arg(
-        long,
-        help = "Enable FIFO output to /tmp/presence for compatibility with existing readers"
-    )]
-    pub fifo_output: bool,
-
-    /// FIFO output path
-    #[arg(
-        long,
-        default_value = "/tmp/presence",
-        help = "FIFO output path [default: /tmp/presence for spi-lib compatibility]"
-    )]
-    pub fifo_path: String,
-
-    /// FIFO output format
-    #[arg(
-        long,
-        default_value = "json",
-        help = "FIFO output format: 'simple' (BGT60TR13C compatible) or 'json' (enhanced)"
-    )]
-    pub fifo_format: fifo::FifoFormat,
-
-    /// FIFO output interval in seconds (0 = every measurement, 5.0 = spi-lib compatible)
-    #[arg(
-        long,
-        default_value = "5.0",
-        help = "FIFO output interval in seconds (5.0=spi-lib compatible, 0=every measurement)"
-    )]
-    pub fifo_interval: f32,
 
     #[command(subcommand)]
     pub command: Commands,

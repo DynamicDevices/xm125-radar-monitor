@@ -34,7 +34,7 @@ async fn main() {
     let cli = Cli::parse();
 
     // Initialize logging
-    if cli.verbose {
+    if cli.logging.verbose {
         env::set_var("RUST_LOG", "debug");
     } else {
         env::set_var("RUST_LOG", "info");
@@ -78,7 +78,7 @@ async fn run(cli: Cli) -> Result<(), RadarError> {
     }
 
     // Print startup banner unless quiet mode
-    if !cli.quiet {
+    if !cli.output.quiet {
         println!("xm125-radar-monitor v{}", env!("CARGO_PKG_VERSION"));
         println!("Copyright (c) 2025 Dynamic Devices Ltd. All rights reserved.");
         println!("XM125 Radar Module Monitor");
@@ -96,16 +96,16 @@ async fn run(cli: Cli) -> Result<(), RadarError> {
     let mut radar = XM125Radar::new(i2c_device, gpio_pins);
 
     // Initialize FIFO writer if enabled
-    let mut fifo_writer = if cli.fifo_output {
-        match FifoWriter::new(&cli.fifo_path, cli.fifo_interval) {
+    let mut fifo_writer = if cli.output.fifo_output {
+        match FifoWriter::new(&cli.output.fifo_path, cli.output.fifo_interval) {
             Ok(writer) => {
-                if cli.fifo_interval > 0.0 {
+                if cli.output.fifo_interval > 0.0 {
                     info!("FIFO output enabled: {} (format: {:?}, interval: {:.1}s - spi-lib compatible)", 
-                          cli.fifo_path, cli.fifo_format, cli.fifo_interval);
+                          cli.output.fifo_path, cli.output.fifo_format, cli.output.fifo_interval);
                 } else {
                     info!(
                         "FIFO output enabled: {} (format: {:?}, real-time mode)",
-                        cli.fifo_path, cli.fifo_format
+                        cli.output.fifo_path, cli.output.fifo_format
                     );
                 }
                 // Send startup status (same as spi-lib)
