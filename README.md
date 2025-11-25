@@ -7,7 +7,7 @@
 
 Production-ready CLI tool for Acconeer XM125 radar modules with verified 7m detection range and comprehensive configuration control.
 
-**Version**: 2.0.6  
+**Version**: 2.0.8  
 **Maintainer**: Alex J Lennon (ajlennon@dynamicdevices.co.uk)  
 **Copyright**: © 2025 Dynamic Devices Ltd. All rights reserved.
 
@@ -19,6 +19,7 @@ Production-ready CLI tool for Acconeer XM125 radar modules with verified 7m dete
 - **Automatic Firmware Management**: Auto-detects and updates firmware via `stm32flash`
 - **Comprehensive Configuration**: Direct parameter control with custom ranges up to 7m
 - **Enhanced Monitoring**: Continuous operation with detailed CSV export and confidence analysis
+- **FIFO Integration**: Compatible with spi-lib readers, drop-in replacement for BGT60TR13C systems
 - **Internal GPIO Control**: Hardware reset and bootloader control without external scripts
 - **Register-Level Debugging**: Complete register dumps with descriptions for optimization
 - **Cross-compilation**: Native ARM64 builds for embedded targets
@@ -145,6 +146,12 @@ sudo xm125-radar-monitor --debug-registers presence --min-range 0.3 --max-range 
 # Long range room occupancy monitoring with CSV output
 sudo xm125-radar-monitor presence --presence-range long --continuous --save-to occupancy.csv
 
+# FIFO output for system integration (spi-lib compatible)
+sudo xm125-radar-monitor presence --continuous --fifo-output --fifo-format simple --fifo-interval 5.0
+
+# Real-time FIFO output with enhanced JSON data
+sudo xm125-radar-monitor presence --continuous --fifo-output --fifo-format json --fifo-interval 0
+
 # Power-efficient infinite monitoring (2 second intervals)
 sudo xm125-radar-monitor presence --presence-range long --frame-rate 5.0 --continuous --interval 2000
 
@@ -226,6 +233,64 @@ XM125 Register Dump - Presence Mode
 | **Distance** | 0.1-3.0m | ~100ms | Precise range measurement |
 | **Presence** | 0.06-7.0m | ~100ms | Motion/occupancy detection |
 | **Breathing** | 0.3-1.5m | 5-20s | Breathing pattern analysis |
+
+## FIFO Integration (System Integration)
+
+The XM125 radar monitor provides **drop-in compatibility** with existing spi-lib (BGT60TR13C) systems through FIFO output.
+
+### FIFO Configuration
+
+```bash
+# Basic FIFO output (spi-lib compatible, 5-second intervals)
+sudo xm125-radar-monitor presence --continuous --fifo-output
+
+# Custom FIFO path
+sudo xm125-radar-monitor presence --continuous --fifo-output --fifo-path /tmp/custom_fifo
+
+# Real-time mode (every measurement)
+sudo xm125-radar-monitor presence --continuous --fifo-output --fifo-interval 0
+
+# Enhanced JSON format with timing control
+sudo xm125-radar-monitor presence --continuous --fifo-output --fifo-format json --fifo-interval 2.0
+```
+
+### FIFO Output Formats
+
+#### Simple Format (BGT60TR13C Compatible)
+```
+1 2.45
+0 0.00
+STATUS Starting up
+STATUS App exit
+```
+
+#### JSON Format (Enhanced XM125 Data)
+```json
+{
+  "timestamp": "2025-01-25 14:30:25.123",
+  "sensor_type": "XM125",
+  "detection_mode": "presence",
+  "presence_detected": true,
+  "presence_distance_m": 2.45,
+  "intra_score": 1.8,
+  "inter_score": 2.1,
+  "signal_quality": "STRONG",
+  "confidence": "HIGH"
+}
+```
+
+### Reading FIFO Data
+
+```bash
+# Read FIFO output
+cat /tmp/presence
+
+# Continuous monitoring
+tail -f /tmp/presence
+
+# Use with existing BGT60TR13C applications
+your_existing_reader < /tmp/presence
+```
 
 ## Configuration Options
 

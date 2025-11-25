@@ -8,6 +8,7 @@ use std::process;
 
 mod cli;
 mod error;
+mod fifo;
 mod firmware;
 mod gpio;
 mod i2c;
@@ -15,6 +16,7 @@ mod radar;
 
 use cli::{Cli, Commands, FirmwareAction, GpioAction, PresenceRange, ProfileMode};
 use error::RadarError;
+use fifo::FifoWriter;
 use gpio::XM125GpioController;
 use radar::XM125Radar;
 
@@ -85,15 +87,44 @@ async fn run(cli: Cli) -> Result<(), RadarError> {
     let gpio_pins = cli.get_gpio_pins();
     let mut radar = XM125Radar::new(i2c_device, gpio_pins);
 
+    // Initialize FIFO writer if enabled
+    let mut fifo_writer = if cli.fifo_output {
+        match FifoWriter::new(&cli.fifo_path, cli.fifo_interval) {
+            Ok(writer) => {
+                if cli.fifo_interval > 0.0 {
+                    info!("FIFO output enabled: {} (format: {:?}, interval: {:.1}s - spi-lib compatible)", 
+                          cli.fifo_path, cli.fifo_format, cli.fifo_interval);
+                } else {
+                    info!("FIFO output enabled: {} (format: {:?}, real-time mode)", 
+                          cli.fifo_path, cli.fifo_format);
+                }
+                // Send startup status (same as spi-lib)
+                let _ = writer.write_status("Starting up");
+                Some(writer)
+            }
+            Err(e) => {
+                warn!("Failed to initialize FIFO writer: {}", e);
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     // Execute the command
-    execute_command(&cli, &mut radar).await?;
+    execute_command(&cli, &mut radar, fifo_writer.as_mut()).await?;
+
+    // Send exit status if FIFO is enabled
+    if let Some(ref writer) = fifo_writer {
+        let _ = writer.write_status("App exit");
+    }
 
     Ok(())
 }
 
 /// Execute the main command logic
 #[allow(clippy::too_many_lines)]
-async fn execute_command(cli: &Cli, radar: &mut XM125Radar) -> Result<(), RadarError> {
+async fn execute_command(cli: &Cli, radar: &mut XM125Radar, fifo_writer: Option<&mut FifoWriter>) -> Result<(), RadarError> {
     match &cli.command {
         Commands::Status => {
             let status = radar.get_status()?;
@@ -151,11 +182,16 @@ async fn execute_command(cli: &Cli, radar: &mut XM125Radar) -> Result<(), RadarE
             }
 
             if *continuous {
-                monitor_distance_continuous(radar, cli, *count, *interval, save_to.as_deref())
+                monitor_distance_continuous(radar, cli, *count, *interval, save_to.as_deref(), fifo_writer)
                     .await?;
             } else {
                 let result = radar.measure_distance().await?;
                 display_distance_result(&result, &cli.format);
+                
+                // Single measurement FIFO output
+                if let Some(writer) = fifo_writer {
+                    write_distance_to_fifo(writer, &result, &cli.fifo_format)?;
+                }
             }
         }
 
@@ -191,11 +227,16 @@ async fn execute_command(cli: &Cli, radar: &mut XM125Radar) -> Result<(), RadarE
             }
 
             if *continuous {
-                monitor_presence_continuous(radar, cli, *count, *interval, save_to.as_deref())
+                monitor_presence_continuous(radar, cli, *count, *interval, save_to.as_deref(), fifo_writer)
                     .await?;
             } else {
                 let result = radar.measure_presence().await?;
                 display_presence_result(&result, &cli.format);
+                
+                // Single measurement FIFO output
+                if let Some(writer) = fifo_writer {
+                    write_presence_to_fifo(writer, &result, &cli.fifo_format)?;
+                }
             }
         }
 
@@ -441,6 +482,7 @@ async fn monitor_distance_continuous(
     count: Option<u32>,
     interval: u64,
     save_to: Option<&str>,
+    mut fifo_writer: Option<&mut FifoWriter>,
 ) -> Result<(), RadarError> {
     use tokio::time::{sleep, Duration};
 
@@ -519,6 +561,11 @@ async fn monitor_distance_continuous(
                     })?;
                 }
 
+                // FIFO output
+                if let Some(ref mut writer) = fifo_writer {
+                    let _ = write_distance_to_fifo(writer, &result, &cli.fifo_format);
+                }
+
                 // Check if we've reached the target count
                 if !infinite && measurement_count >= total_count {
                     break;
@@ -557,6 +604,7 @@ async fn monitor_presence_continuous(
     count: Option<u32>,
     interval: u64,
     save_to: Option<&str>,
+    mut fifo_writer: Option<&mut FifoWriter>,
 ) -> Result<(), RadarError> {
     use tokio::time::{sleep, Duration};
 
@@ -705,9 +753,14 @@ async fn monitor_presence_continuous(
                         .map_err(|e| RadarError::DeviceError {
                             message: format!("Failed to write CSV record: {e}"),
                         })?;
-                    writer.flush().map_err(|e| RadarError::DeviceError {
-                        message: format!("Failed to flush CSV writer: {e}"),
-                    })?;
+                    writer.flush()                        .map_err(|e| RadarError::DeviceError {
+                            message: format!("Failed to flush CSV writer: {e}"),
+                        })?;
+                }
+
+                // FIFO output
+                if let Some(ref mut writer) = fifo_writer {
+                    let _ = write_presence_to_fifo(writer, &result, &cli.fifo_format);
                 }
 
                 // Check if we've reached the target count
@@ -917,5 +970,74 @@ fn handle_gpio_command(cli: &Cli, action: &GpioAction) -> Result<(), RadarError>
         }
     }
 
+    Ok(())
+}
+
+/// Write distance measurement to FIFO with timing control
+fn write_distance_to_fifo(
+    writer: &mut FifoWriter,
+    result: &radar::DistanceMeasurement,
+    format: &fifo::FifoFormat,
+) -> Result<(), RadarError> {
+    match format {
+        fifo::FifoFormat::Simple => {
+            // Simple format: presence_state (always 1 for distance) and distance
+            let _ = writer.write_timed_simple(1, result.distance);
+        }
+        fifo::FifoFormat::Json => {
+            let json_data = serde_json::json!({
+                "timestamp": chrono::Utc::now().format("%Y-%m-%d %H:%M:%S%.3f").to_string(),
+                "sensor_type": "XM125",
+                "detection_mode": "distance",
+                "distance_m": result.distance,
+                "signal_strength": result.strength,
+                "temperature_c": result.temperature
+            });
+            let _ = writer.write_timed_json(&json_data);
+        }
+    }
+    Ok(())
+}
+
+/// Write presence measurement to FIFO with timing control
+fn write_presence_to_fifo(
+    writer: &mut FifoWriter,
+    result: &radar::PresenceMeasurement,
+    format: &fifo::FifoFormat,
+) -> Result<(), RadarError> {
+    match format {
+        fifo::FifoFormat::Simple => {
+            // BGT60TR13C compatible format: presence_state (0/1) and distance
+            let presence_state = if result.presence_detected { 1 } else { 0 };
+            let _ = writer.write_timed_simple(presence_state, result.presence_distance);
+        }
+        fifo::FifoFormat::Json => {
+            let json_data = serde_json::json!({
+                "timestamp": chrono::Utc::now().format("%Y-%m-%d %H:%M:%S%.3f").to_string(),
+                "sensor_type": "XM125",
+                "detection_mode": "presence",
+                "presence_detected": result.presence_detected,
+                "presence_distance_m": result.presence_distance,
+                "intra_score": result.intra_presence_score,
+                "inter_score": result.inter_presence_score,
+                "signal_quality": if result.intra_presence_score.max(result.inter_presence_score) > 2.0 {
+                    "STRONG"
+                } else if result.intra_presence_score.max(result.inter_presence_score) > 1.0 {
+                    "MEDIUM"
+                } else if result.intra_presence_score.max(result.inter_presence_score) > 0.5 {
+                    "WEAK"
+                } else {
+                    "NONE"
+                },
+                "confidence": if result.presence_detected {
+                    let max_score = result.intra_presence_score.max(result.inter_presence_score);
+                    if max_score > 3.0 { "HIGH" } else if max_score > 1.5 { "MEDIUM" } else { "LOW" }
+                } else {
+                    "NONE"
+                }
+            });
+            let _ = writer.write_timed_json(&json_data);
+        }
+    }
     Ok(())
 }

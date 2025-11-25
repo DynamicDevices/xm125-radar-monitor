@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand, ValueEnum};
 
 use crate::firmware;
+use crate::fifo;
 
 /// Parse I2C address from string, supporting both decimal and hex formats
 fn parse_i2c_address(s: &str) -> Result<u16, String> {
@@ -183,6 +184,34 @@ pub struct Cli {
         help = "Directory containing firmware binaries"
     )]
     pub firmware_path: String,
+
+    /// Enable FIFO output (compatible with spi-lib readers)
+    #[arg(long, help = "Enable FIFO output to /tmp/presence for compatibility with existing readers")]
+    pub fifo_output: bool,
+
+    /// FIFO output path
+    #[arg(
+        long,
+        default_value = "/tmp/presence",
+        help = "FIFO output path [default: /tmp/presence for spi-lib compatibility]"
+    )]
+    pub fifo_path: String,
+
+    /// FIFO output format
+    #[arg(
+        long,
+        default_value = "json",
+        help = "FIFO output format: 'simple' (BGT60TR13C compatible) or 'json' (enhanced)"
+    )]
+    pub fifo_format: fifo::FifoFormat,
+
+    /// FIFO output interval in seconds (0 = every measurement, 5.0 = spi-lib compatible)
+    #[arg(
+        long,
+        default_value = "5.0",
+        help = "FIFO output interval in seconds (5.0=spi-lib compatible, 0=every measurement)"
+    )]
+    pub fifo_interval: f32,
 
     #[command(subcommand)]
     pub command: Commands,

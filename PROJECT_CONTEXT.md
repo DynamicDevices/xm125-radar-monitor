@@ -1,8 +1,8 @@
 # XM125 Radar Monitor - Project Context
 
-**Version**: v1.1.0  
+**Version**: v2.0.8  
 **Status**: Production Ready  
-**Last Updated**: October 2025
+**Last Updated**: January 2025
 
 ## 🎯 Project Overview
 
@@ -41,6 +41,7 @@ The XM125 Radar Monitor is a production-ready CLI tool for comprehensive testing
 
 ### ✅ Completed Features
 - **Multi-Mode Detection**: All three detection modes implemented and tested
+- **FIFO Integration**: Drop-in replacement for spi-lib (BGT60TR13C) with timing compatibility
 - **Hardware Validation**: Successfully tested on Sentai i.MX8MM hardware
 - **Firmware Management**: Automatic detection and switching between firmware types
 - **Documentation**: Comprehensive guides for engineers and technicians

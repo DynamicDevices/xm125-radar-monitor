@@ -1,5 +1,83 @@
 # Changelog
 
+## [2.0.8] - 2025-01-25
+
+### 🔄 **FIFO INTEGRATION - SPI-LIB COMPATIBILITY**
+
+#### ✨ **New Features**
+- **ADDED**: Complete FIFO output system compatible with spi-lib (BGT60TR13C) readers
+- **ADDED**: `--fifo-output` flag to enable FIFO writing to `/tmp/presence`
+- **ADDED**: `--fifo-format` option: `simple` (BGT compatible) or `json` (enhanced XM125 data)
+- **ADDED**: `--fifo-interval` timing control: 5.0s default (spi-lib compatible), 0=real-time
+- **ADDED**: `--fifo-path` for custom FIFO locations
+
+#### 🎯 **Drop-in Replacement Capability**
+- **COMPATIBLE**: Exact same FIFO path (`/tmp/presence`) as spi-lib
+- **COMPATIBLE**: Same 5.0 second update interval as BGT60TR13C
+- **COMPATIBLE**: Identical data format (`1 2.45\n`) in simple mode
+- **COMPATIBLE**: Same status messages (`STATUS Starting up`, `STATUS App exit`)
+- **COMPATIBLE**: Identical FIFO mechanics (O_NONBLOCK, open-write-close pattern)
+
+#### 🔧 **Technical Implementation**
+- **ROBUST**: Non-blocking FIFO writes with graceful no-reader handling
+- **FLEXIBLE**: Real-time mode (interval=0) for applications needing every measurement
+- **ENHANCED**: JSON format provides rich XM125 data (scores, confidence, timestamps)
+- **EFFICIENT**: Timing-controlled writes prevent FIFO flooding
+
+#### 📊 **Usage Examples**
+```bash
+# Drop-in spi-lib replacement (default behavior)
+sudo xm125-radar-monitor presence --continuous --fifo-output --fifo-format simple
+
+# Real-time JSON mode
+sudo xm125-radar-monitor presence --continuous --fifo-output --fifo-interval 0
+
+# Combined with existing features
+sudo xm125-radar-monitor presence --min-range 0.5 --max-range 7.0 --continuous --fifo-output --save-to data.csv
+```
+
+#### 🚀 **Impact**
+- **ENABLES**: Seamless migration from BGT60TR13C to XM125 radar systems
+- **MAINTAINS**: All existing downstream applications reading `/tmp/presence`
+- **ENHANCES**: 7m detection range vs BGT's shorter range
+- **PROVIDES**: Rich JSON data format for advanced applications
+
+## [2.0.7] - 2025-10-24
+
+### 🎯 **CRITICAL RANGE CONFIGURATION FIX**
+
+#### 🐛 **Major Bug Resolved**
+- **FIXED**: Start Point and End Point registers not being written to hardware
+- **FIXED**: Custom range values (--min-range, --max-range) were ignored by hardware
+- **FIXED**: Missing complete Acconeer configuration sequence
+- **RESOLVED**: 7m range capability now fully functional
+
+#### ✅ **Technical Implementation**
+- **ADDED**: Start Point (0x0052) and End Point (0x0053) register writes
+- **IMPLEMENTED**: Complete Acconeer-compliant configuration sequence:
+  - Reset Module → Configure Registers → Apply Configuration → Verify → Start Detector
+- **ENHANCED**: Proper command sequence with CMD_PRESENCE_APPLY_CONFIGURATION and CMD_PRESENCE_START_DETECTOR
+- **VERIFIED**: Configuration verification ensures settings are accepted by hardware
+
+#### 🔧 **Configuration Sequence**
+1. **Reset Module**: CMD_PRESENCE_RESET_MODULE (1381192737) to register 0x0100
+2. **Write Registers**: All configuration values including Start/End Point
+3. **Apply Configuration**: CMD_PRESENCE_APPLY_CONFIGURATION (1) to register 0x0100
+4. **Wait & Verify**: Ensure configuration is processed and accepted
+5. **Start Detector**: CMD_PRESENCE_START_DETECTOR (2) to register 0x0100
+
+#### 🎯 **Hardware Verification**
+- **CONFIRMED**: Start Point: 500mm (0.5m) correctly written
+- **CONFIRMED**: End Point: 7000mm (7.0m) correctly written  
+- **TESTED**: Full 7m range detection capability
+- **VALIDATED**: All configuration values properly applied to hardware
+
+#### 🚀 **Impact**
+- **RESOLVED**: Critical functionality gap where custom ranges were calculated but never applied
+- **ENABLED**: True 7m detection range with proper hardware configuration
+- **IMPROVED**: Datasheet-compliant configuration process
+- **ENHANCED**: Reliable presence detection with verified settings
+
 ## [2.0.6] - 2025-10-24
 
 ### 🔧 **AUTOMATIC GPIO INITIALIZATION FIX**

@@ -1,6 +1,6 @@
 [package]
 name = "xm125-radar-monitor"
-version = "2.0.6"
+version = "2.0.8"
 edition = "2021"
 license = "GPL-3.0-or-later"
 description = "Embedded Rust application for XM125 radar module monitoring and distance detection"
@@ -61,6 +61,9 @@ indicatif = "0.17"
 # Additional utilities
 regex = "1.10"
 uuid = { version = "1.6", features = ["v4"] }
+
+# FIFO support
+libc = "0.2"
 
 [dev-dependencies]
 tokio-test = "0.4"
