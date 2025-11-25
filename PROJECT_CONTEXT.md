@@ -39,14 +39,29 @@ The XM125 Radar Monitor is a production-ready CLI tool for comprehensive testing
 
 ## 📊 Current Status
 
-### ✅ Completed Features
-- **Multi-Mode Detection**: All three detection modes implemented and tested
+### ✅ Completed & Tested Features
+- **Presence Detection Mode**: ✅ **Fully tested and production-ready**
+  - 7m detection range verified and working reliably
+  - All features validated: continuous monitoring, CSV export, FIFO integration
+  - Successfully deployed in production environments
 - **FIFO Integration**: Drop-in replacement for spi-lib (BGT60TR13C) with timing compatibility
 - **Hardware Validation**: Successfully tested on Sentai i.MX8MM hardware
 - **Firmware Management**: Automatic detection and switching between firmware types
 - **Documentation**: Comprehensive guides for engineers and technicians
 - **CI/CD Pipeline**: Full automated testing with security audits
-- **Production Deployment**: Ready for field deployment
+
+### ⚠️ Implemented but Untested Features
+- **Distance Detection Mode**: Code complete, firmware support ready
+  - **Status**: Untested - may not be working correctly
+  - **Risk**: Use with caution in production environments
+- **Breathing Monitor Mode**: Code complete, firmware support ready  
+  - **Status**: Untested - may not be working correctly
+  - **Risk**: Use with caution in production environments
+
+### 🎯 Testing Priority
+**Current Focus**: Presence detection mode (production-validated)
+**Next Priority**: Distance detection mode validation and testing
+**Future Work**: Breathing monitor mode validation and testing
 
 ### 🎯 Detection Modes Status
 | Mode | Implementation | Hardware Testing | Status |

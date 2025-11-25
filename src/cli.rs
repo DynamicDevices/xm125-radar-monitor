@@ -99,6 +99,11 @@ impl Cli {
 Production-ready CLI tool for Acconeer XM125 radar modules with automatic firmware 
 management and streamlined commands for technicians.
 
+⚠️  TESTING STATUS:
+  ✅ PRESENCE DETECTION: Fully tested and production-ready (7m range verified)
+  ⚠️  DISTANCE DETECTION: Code complete but untested - use with caution
+  ⚠️  BREATHING MONITOR: Code complete but untested - use with caution
+
 QUICK START:
   1. Check device status:        xm125-radar-monitor status
   2. Distance measurement:       xm125-radar-monitor distance

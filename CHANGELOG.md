@@ -1,6 +1,24 @@
 # Changelog
 
-## [2.0.8] - 2025-01-25
+## [2.0.8] - 2025-01-25 (Updated)
+
+### 📋 **DOCUMENTATION UPDATE - TESTING STATUS CLARIFICATION**
+
+#### 📝 **Documentation Changes**
+- **ADDED**: Clear testing status indicators in README.md and PROJECT_CONTEXT.md
+- **ADDED**: Testing status warning in CLI help text
+- **CLARIFIED**: Presence detection mode is fully tested and production-ready
+- **CLARIFIED**: Distance and breathing modes are implemented but untested
+- **NOTED**: Untested modes should be used with caution in production
+
+#### ⚠️ **Testing Status Summary**
+- **✅ Presence Detection**: Fully validated, 7m range verified, production-ready
+- **⚠️ Distance Detection**: Code complete, firmware support ready, but untested
+- **⚠️ Breathing Monitor**: Code complete, firmware support ready, but untested
+
+---
+
+## [2.0.8] - 2025-01-25 (Original)
 
 ### 🔄 **FIFO INTEGRATION - SPI-LIB COMPATIBILITY**
 

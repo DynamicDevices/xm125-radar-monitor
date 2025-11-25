@@ -11,6 +11,19 @@ Production-ready CLI tool for Acconeer XM125 radar modules with verified 7m dete
 **Maintainer**: Alex J Lennon (ajlennon@dynamicdevices.co.uk)  
 **Copyright**: © 2025 Dynamic Devices Ltd. All rights reserved.
 
+## ⚠️ Testing Status
+
+**Currently Tested & Verified**: ✅ **Presence Detection Mode**
+- Fully tested and verified in production environments
+- 7m detection range confirmed and working reliably
+- All features (continuous monitoring, CSV export, FIFO integration) validated
+
+**Supported but Untested**: ⚠️ **Distance Detection & Breathing Monitor Modes**
+- Code implementation complete with full firmware support
+- **May not be working correctly** - requires testing and validation
+- Use with caution in production environments
+- Testing and validation contributions welcome
+
 ## Features
 
 - **Verified 7m Detection Range**: Properly configured Profile 5 with Auto Profile disabled
