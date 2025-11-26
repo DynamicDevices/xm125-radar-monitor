@@ -362,6 +362,18 @@ Use `--verbose` for detailed I2C transaction logs and debugging information.
 - **Build**: Rust 1.70+, cross-compilation toolchain for ARM64, `csv` crate
 - **Hardware**: Linux GPIO sysfs interface
 
+## 📚 Documentation
+
+Comprehensive documentation is available in the [`docs/`](docs/) directory:
+
+- **[📋 Project Context](docs/PROJECT_CONTEXT.md)** - Architecture and high-level overview
+- **[📡 FIFO Interface Specification](docs/XM125_FIFO_INTERFACE_SPECIFICATION.md)** - Complete interface spec for container developers
+- **[🧪 Hardware Testing Guide](docs/HARDWARE_TEST_GUIDE.md)** - Testing procedures and protocols
+- **[⚡ Testing Quick Reference](docs/TESTING_QUICK_REFERENCE.md)** - Common testing commands
+- **[📊 Performance Analysis](docs/RADAR_PERFORMANCE_ANALYSIS_REPORT.md)** - Benchmarking and analysis results
+
+See the [documentation index](docs/README.md) for the complete list.
+
 ## License
 
 Licensed under GNU General Public License v3.0. See [LICENSE](LICENSE) for details.

@@ -51,8 +51,8 @@ The XM125 Radar Monitor is a production-ready CLI tool for comprehensive testing
 | Mode | Implementation | Hardware Testing | Status |
 |------|----------------|------------------|---------|
 | **Presence** | ✅ Complete | ✅ Validated | 🟢 Production Ready |
-| **Distance** | ✅ Complete | ⚠️ Untested | ⚠️ Use with Caution |
-| **Breathing** | ✅ Complete | ⚠️ Untested | ⚠️ Use with Caution |
+| **Distance** | ✅ Complete | ✅ Validated | 🟢 Production Ready |
+| **Breathing** | ✅ Complete | ✅ Validated | 🟢 Production Ready |
 
 ## 🚀 Key Achievements
 

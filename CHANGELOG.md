@@ -21,7 +21,7 @@ This release focuses on **clear testing status documentation** to ensure users h
 - **⚠️ BREATHING MONITOR**: Code complete, firmware ready, but untested
 
 #### 🔧 **Documentation Fixes**
-- **CORRECTED**: Detection modes status table in PROJECT_CONTEXT.md
+- **CORRECTED**: Detection modes status table in docs/PROJECT_CONTEXT.md
 - **ALIGNED**: All documentation to consistently reflect actual testing status
 - **ENHANCED**: User guidance for production deployment decisions
 

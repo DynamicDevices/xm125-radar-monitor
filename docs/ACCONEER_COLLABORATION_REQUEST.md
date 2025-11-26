@@ -130,7 +130,7 @@ Range: 0.5m - 7.0m      Detection: Fast + Slow motion
 
 1. **`RADAR_PERFORMANCE_ANALYSIS_REPORT.md`** - Detailed technical analysis
 2. **`TECHNICAL_DATA_SUMMARY.md`** - Complete test data and capabilities
-3. **`HARDWARE_TESTING_GUIDE.md`** - Testing framework documentation
+3. **`HARDWARE_TEST_GUIDE.md`** - Testing framework documentation
 4. **Source Code** - Complete testing application (GitHub available)
 
 ---
