@@ -134,6 +134,23 @@ impl XM125Radar {
         Err(RadarError::NotConnected)
     }
 
+    /// Ensure connection with automatic retry on I2C failures
+    pub fn ensure_connected(&mut self) -> Result<()> {
+        if self.is_connected {
+            // Test if connection is still valid
+            match self.get_status_raw() {
+                Ok(_) => return Ok(()),
+                Err(_) => {
+                    info!("Connection lost, attempting to reconnect...");
+                    self.is_connected = false;
+                }
+            }
+        }
+
+        // Attempt to connect/reconnect
+        self.connect()
+    }
+
     /// Reset XM125 to run mode using internal GPIO control
     fn reset_xm125_to_run_mode(&self) -> Result<()> {
         info!("Executing XM125 reset to run mode using internal GPIO control...");
@@ -173,9 +190,7 @@ impl XM125Radar {
     /// Get formatted status string
     pub fn get_status(&mut self) -> Result<String> {
         // Ensure we're connected (this will trigger GPIO initialization if needed)
-        if !self.is_connected {
-            self.connect()?;
-        }
+        self.ensure_connected()?;
 
         let status = self.get_status_raw()?;
 
@@ -208,9 +223,7 @@ impl XM125Radar {
     /// Get device information
     pub fn get_info(&mut self) -> Result<String> {
         // Ensure we're connected (this will trigger GPIO initialization if needed)
-        if !self.is_connected {
-            self.connect()?;
-        }
+        self.ensure_connected()?;
 
         let version_data = self.i2c.read_register(REG_VERSION, 4)?;
         let version = u32::from_be_bytes([
@@ -326,6 +339,9 @@ impl XM125Radar {
     /// Configure presence range and parameters (called from main.rs)
     pub fn configure_presence_range(&mut self) -> Result<()> {
         info!("🔧 Configuring presence range and parameters...");
+
+        // Ensure we're connected (this will trigger GPIO initialization if needed)
+        self.ensure_connected()?;
 
         // Set detector mode to presence
         self.config.detector_mode = DetectorMode::Presence;

@@ -1,5 +1,41 @@
 # Changelog
 
+## [2.0.10] - 2025-11-28
+
+### 🔧 **AUTO-INITIALIZATION RELIABILITY RELEASE**
+
+#### 🎯 **Primary Focus: Service Startup Robustness**
+
+This release fixes the service startup timing issue by implementing automatic XM125 hardware initialization when I2C communication fails.
+
+#### ✨ **New Features**
+- **ADDED**: Automatic GPIO initialization on I2C communication failures
+- **ADDED**: `ensure_connected()` method with connection validation and retry logic
+- **ADDED**: Robust connection handling in all I2C-dependent operations
+- **ENHANCED**: Service startup reliability - no more manual initialization required
+
+#### 🐛 **Bug Fixes**
+- **FIXED**: Service fails to start after reboot due to timing issues
+- **FIXED**: I2C communication errors when XM125 hardware not properly initialized
+- **FIXED**: Manual GPIO initialization requirement for service startup
+
+#### 🔧 **Technical Improvements**
+- **ENHANCED**: `connect()` method with better error handling and retry logic
+- **ADDED**: Connection validation before all I2C operations
+- **IMPROVED**: Hardware initialization sequence in presence detection
+- **ROBUST**: Auto-recovery from connection loss during operation
+
+#### 📈 **Benefits for Users**
+- **Reliable service startup** without manual intervention
+- **Automatic hardware initialization** on communication failures
+- **Better error recovery** during operation
+- **Production-ready** systemd service integration
+
+#### 🚀 **Production Impact**
+- **Service reliability**: Eliminates manual initialization steps
+- **Deployment simplicity**: Works correctly after reboot/power cycle
+- **Operational stability**: Auto-recovery from hardware communication issues
+
 ## [2.0.9] - 2025-01-25
 
 ### 📋 **TESTING STATUS DOCUMENTATION RELEASE**
