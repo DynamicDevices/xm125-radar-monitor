@@ -117,14 +117,32 @@ impl XM125Radar {
         if let Err(reset_err) = self.reset_xm125_to_run_mode() {
             debug!("Hardware reset failed: {reset_err}");
         } else {
-            // Give module time to initialize after reset
-            std::thread::sleep(std::time::Duration::from_millis(1000));
+            // Give module time to initialize after reset - XM125 needs time to boot
+            info!("Waiting for XM125 to initialize after reset...");
+            std::thread::sleep(std::time::Duration::from_millis(2000));
 
-            // Try connection again after reset
-            if self.get_status_raw().is_ok() {
-                self.is_connected = true;
-                info!("Successfully connected to XM125 after hardware initialization");
-                return Ok(());
+            // Retry connection with exponential backoff (up to 3 attempts)
+            const MAX_RETRIES: u32 = 3;
+            for attempt in 1..=MAX_RETRIES {
+                match self.get_status_raw() {
+                    Ok(_) => {
+                        self.is_connected = true;
+                        info!("Successfully connected to XM125 after hardware initialization (attempt {})", attempt);
+                        return Ok(());
+                    }
+                    Err(e) => {
+                        if attempt < MAX_RETRIES {
+                            let delay_ms = 500u64 * u64::from(attempt); // 500ms, 1000ms, 1500ms
+                            debug!(
+                                "Connection attempt {} failed: {:?}, retrying in {}ms...",
+                                attempt, e, delay_ms
+                            );
+                            std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+                        } else {
+                            warn!("Failed to connect after {} attempts: {:?}", MAX_RETRIES, e);
+                        }
+                    }
+                }
             }
         }
 

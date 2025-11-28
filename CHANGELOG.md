@@ -1,5 +1,34 @@
 # Changelog
 
+## [2.0.11] - 2025-11-28
+
+### 🔧 **POST-RESET TIMING FIX**
+
+#### 🎯 **Primary Focus: I2C Communication After GPIO Reset**
+
+This release fixes the I2C communication failure that occurs immediately after GPIO reset by increasing the initialization delay and adding retry logic with exponential backoff.
+
+#### 🐛 **Bug Fixes**
+- **FIXED**: I2C communication error immediately after GPIO reset sequence
+- **FIXED**: Connection failure despite successful hardware reset
+- **IMPROVED**: Post-reset initialization timing - increased delay from 1s to 2s
+- **ADDED**: Retry logic with exponential backoff (3 attempts: 500ms, 1000ms, 1500ms delays)
+
+#### 🔧 **Technical Improvements**
+- **ENHANCED**: `connect()` method with retry logic after hardware reset
+- **IMPROVED**: Better logging for connection attempts and retries
+- **ROBUST**: Multiple connection attempts give XM125 module time to fully initialize
+
+#### 📈 **Benefits for Users**
+- **Reliable connection** after hardware reset
+- **Better error recovery** with automatic retries
+- **Clearer diagnostics** with improved logging
+
+#### 🚀 **Production Impact**
+- **Service stability**: Eliminates connection failures after reset
+- **Hardware reliability**: Gives XM125 module adequate time to initialize
+- **Operational robustness**: Automatic retry handles timing variations
+
 ## [2.0.10] - 2025-11-28
 
 ### 🔧 **AUTO-INITIALIZATION RELIABILITY RELEASE**
