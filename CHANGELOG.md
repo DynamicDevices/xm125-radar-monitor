@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.0.12] - 2025-11-28
+
+### 🔧 **SERVICE RANGE CONFIGURATION UPDATE**
+
+#### 🎯 **Primary Focus: Extended Detection Range**
+
+This release updates the systemd service to use the full 7.0m detection range instead of the default 3.0m range.
+
+#### ✨ **Service Configuration Changes**
+- **UPDATED**: Service ExecStart command to use `--min-range 0.5 --max-range 7.0` for full 7m detection capability
+- **ENHANCED**: Detection range increased from default 3.0m to 7.0m for better room coverage
+
+#### 📈 **Benefits for Users**
+- **Extended detection range**: Full 7m capability enabled by default in service
+- **Better room coverage**: Improved presence detection for larger spaces
+- **Production-ready**: Service now uses verified 7m range configuration
+
 ## [2.0.11] - 2025-11-28
 
 ### 🔧 **POST-RESET TIMING FIX**

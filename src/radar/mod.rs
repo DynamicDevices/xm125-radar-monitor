@@ -117,32 +117,14 @@ impl XM125Radar {
         if let Err(reset_err) = self.reset_xm125_to_run_mode() {
             debug!("Hardware reset failed: {reset_err}");
         } else {
-            // Give module time to initialize after reset - XM125 needs time to boot
-            info!("Waiting for XM125 to initialize after reset...");
-            std::thread::sleep(std::time::Duration::from_millis(2000));
+            // Give module time to initialize after reset
+            std::thread::sleep(std::time::Duration::from_millis(1000));
 
-            // Retry connection with exponential backoff (up to 3 attempts)
-            const MAX_RETRIES: u32 = 3;
-            for attempt in 1..=MAX_RETRIES {
-                match self.get_status_raw() {
-                    Ok(_) => {
-                        self.is_connected = true;
-                        info!("Successfully connected to XM125 after hardware initialization (attempt {})", attempt);
-                        return Ok(());
-                    }
-                    Err(e) => {
-                        if attempt < MAX_RETRIES {
-                            let delay_ms = 500u64 * u64::from(attempt); // 500ms, 1000ms, 1500ms
-                            debug!(
-                                "Connection attempt {} failed: {:?}, retrying in {}ms...",
-                                attempt, e, delay_ms
-                            );
-                            std::thread::sleep(std::time::Duration::from_millis(delay_ms));
-                        } else {
-                            warn!("Failed to connect after {} attempts: {:?}", MAX_RETRIES, e);
-                        }
-                    }
-                }
+            // Try connection again after reset
+            if self.get_status_raw().is_ok() {
+                self.is_connected = true;
+                info!("Successfully connected to XM125 after hardware initialization");
+                return Ok(());
             }
         }
 
@@ -150,23 +132,6 @@ impl XM125Radar {
         warn!("Failed to connect to XM125: I2C communication error after hardware initialization");
         warn!("XM125 not detected on I2C bus - check hardware connections and power");
         Err(RadarError::NotConnected)
-    }
-
-    /// Ensure connection with automatic retry on I2C failures
-    pub fn ensure_connected(&mut self) -> Result<()> {
-        if self.is_connected {
-            // Test if connection is still valid
-            match self.get_status_raw() {
-                Ok(_) => return Ok(()),
-                Err(_) => {
-                    info!("Connection lost, attempting to reconnect...");
-                    self.is_connected = false;
-                }
-            }
-        }
-
-        // Attempt to connect/reconnect
-        self.connect()
     }
 
     /// Reset XM125 to run mode using internal GPIO control
@@ -208,7 +173,9 @@ impl XM125Radar {
     /// Get formatted status string
     pub fn get_status(&mut self) -> Result<String> {
         // Ensure we're connected (this will trigger GPIO initialization if needed)
-        self.ensure_connected()?;
+        if !self.is_connected {
+            self.connect()?;
+        }
 
         let status = self.get_status_raw()?;
 
@@ -241,7 +208,9 @@ impl XM125Radar {
     /// Get device information
     pub fn get_info(&mut self) -> Result<String> {
         // Ensure we're connected (this will trigger GPIO initialization if needed)
-        self.ensure_connected()?;
+        if !self.is_connected {
+            self.connect()?;
+        }
 
         let version_data = self.i2c.read_register(REG_VERSION, 4)?;
         let version = u32::from_be_bytes([
@@ -357,9 +326,6 @@ impl XM125Radar {
     /// Configure presence range and parameters (called from main.rs)
     pub fn configure_presence_range(&mut self) -> Result<()> {
         info!("🔧 Configuring presence range and parameters...");
-
-        // Ensure we're connected (this will trigger GPIO initialization if needed)
-        self.ensure_connected()?;
 
         // Set detector mode to presence
         self.config.detector_mode = DetectorMode::Presence;
