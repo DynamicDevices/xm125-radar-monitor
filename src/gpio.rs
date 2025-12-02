@@ -113,7 +113,17 @@ impl XM125GpioController {
         self.set_gpio_direction(self.pins.wake_up, GpioDirection::Output, "Wake Up")?;
         self.set_gpio_direction(self.pins.boot, GpioDirection::Output, "Bootloader")?;
 
+        // Mark as initialized so we can set values
         self.initialized = true;
+
+        // Set initial values: reset HIGH (released), wake HIGH (awake), boot LOW (run mode)
+        // This ensures pins are in correct state after initialization, especially GPIO139 (wake)
+        // which must be HIGH for the device to be powered/awake, and GPIO124 (reset) which must
+        // be HIGH (released) to allow the device to operate normally
+        self.set_gpio_value(self.pins.reset, GpioValue::High, "Reset (released)")?;
+        self.set_gpio_value(self.pins.wake_up, GpioValue::High, "Wake Up (awake)")?;
+        self.set_gpio_value(self.pins.boot, GpioValue::Low, "Bootloader (run mode)")?;
+
         info!("✅ GPIO initialization completed successfully");
         Ok(())
     }
