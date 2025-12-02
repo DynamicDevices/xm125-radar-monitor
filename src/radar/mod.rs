@@ -327,6 +327,9 @@ impl XM125Radar {
     pub fn configure_presence_range(&mut self) -> Result<()> {
         info!("🔧 Configuring presence range and parameters...");
 
+        // Ensure connection before configuration
+        self.connect()?;
+
         // Set detector mode to presence
         self.config.detector_mode = DetectorMode::Presence;
 
