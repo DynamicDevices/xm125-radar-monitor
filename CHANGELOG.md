@@ -1,5 +1,37 @@
 # Changelog
 
+## [2.0.14] - 2025-12-02
+
+### 🔧 **RESET PIN CONTROL FIX**
+
+#### 🎯 **Primary Focus: GPIO Reset Line Control**
+
+This release fixes a critical regression where the reset pin was not being properly controlled after GPIO initialization, preventing the XM125 from initializing correctly.
+
+#### 🐛 **Bug Fixes**
+- **FIXED**: Reset pin not being set HIGH after GPIO initialization (regression introduced in v2.0.12)
+- **FIXED**: GPIO initialization now properly sets initial pin values:
+  - Reset pin HIGH (released) - allows device to operate normally
+  - Wake pin HIGH (awake) - ensures device is powered/awake
+  - Boot pin LOW (run mode) - ensures device starts in run mode
+- **RESTORED**: GPIO initialization code that was accidentally removed in commit 7a66491
+
+#### 🔧 **Technical Improvements**
+- **RESTORED**: Initial GPIO value setting after direction configuration
+- **ENHANCED**: Comments explaining why each pin must be set to specific values
+- **VERIFIED**: Reset line control working correctly on target hardware
+
+#### 📈 **Benefits for Users**
+- **Reliable device initialization** - reset pin properly controlled
+- **XM125 appears on I2C bus** - device initializes correctly
+- **MCU_INT signal works** - device ready signal functions properly
+- **Production-ready** - verified working on target hardware
+
+#### 🚀 **Production Impact**
+- **Hardware initialization**: Reset line now properly controlled
+- **I2C communication**: Device appears on bus 2 at address 0x52
+- **Service reliability**: Device initializes correctly on startup
+
 ## [2.0.12] - 2025-11-28
 
 ### 🔧 **SERVICE RANGE CONFIGURATION UPDATE**
