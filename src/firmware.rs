@@ -263,6 +263,7 @@ impl FirmwareManager {
         debug!("XM125 run mode output: {stdout}");
 
         // Give the device time to fully initialize in run mode
+        // Hardware reset samples BOOT0 pin, so device should boot from flash
         tokio::time::sleep(Duration::from_millis(1500)).await;
 
         // Verify the device is actually in run mode by checking I2C bus
