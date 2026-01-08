@@ -43,6 +43,8 @@ impl Default for XM125GpioPins {
 pub enum GpioDirection {
     Input,
     Output,
+    OutputLow,  // Output with initial value LOW (atomic operation)
+    OutputHigh, // Output with initial value HIGH (atomic operation)
 }
 
 impl std::fmt::Display for GpioDirection {
@@ -50,6 +52,8 @@ impl std::fmt::Display for GpioDirection {
         match self {
             GpioDirection::Input => write!(f, "in"),
             GpioDirection::Output => write!(f, "out"),
+            GpioDirection::OutputLow => write!(f, "low"),
+            GpioDirection::OutputHigh => write!(f, "high"),
         }
     }
 }
@@ -103,26 +107,21 @@ impl XM125GpioController {
         self.export_gpio(self.pins.wake_up, "Wake Up")?;
         self.export_gpio(self.pins.boot, "Bootloader")?;
 
-        // Set directions
-        self.set_gpio_direction(self.pins.reset, GpioDirection::Output, "Reset")?;
+        // Set directions with initial values atomically to prevent glitches
+        // Using "low" or "high" direction sets both direction and value in one operation
+        // This prevents the brief microsecond pulse that occurs when setting direction
+        // and value separately
+        self.set_gpio_direction(self.pins.reset, GpioDirection::OutputHigh, "Reset")?;
         self.set_gpio_direction(
             self.pins.mcu_interrupt,
             GpioDirection::Input,
             "MCU Interrupt",
         )?;
-        self.set_gpio_direction(self.pins.wake_up, GpioDirection::Output, "Wake Up")?;
-        self.set_gpio_direction(self.pins.boot, GpioDirection::Output, "Bootloader")?;
+        self.set_gpio_direction(self.pins.wake_up, GpioDirection::OutputHigh, "Wake Up")?;
+        self.set_gpio_direction(self.pins.boot, GpioDirection::OutputLow, "Bootloader")?;
 
         // Mark as initialized so we can set values
         self.initialized = true;
-
-        // Set initial values: reset HIGH (released), wake HIGH (awake), boot LOW (run mode)
-        // This ensures pins are in correct state after initialization, especially GPIO139 (wake)
-        // which must be HIGH for the device to be powered/awake, and GPIO124 (reset) which must
-        // be HIGH (released) to allow the device to operate normally
-        self.set_gpio_value(self.pins.reset, GpioValue::High, "Reset (released)")?;
-        self.set_gpio_value(self.pins.wake_up, GpioValue::High, "Wake Up (awake)")?;
-        self.set_gpio_value(self.pins.boot, GpioValue::Low, "Bootloader (run mode)")?;
 
         info!("✅ GPIO initialization completed successfully");
         Ok(())
@@ -388,7 +387,7 @@ impl XM125GpioController {
         // Assert reset (active-low)
         debug!("Asserting reset (LOW)");
         self.set_gpio_value(self.pins.reset, GpioValue::Low, "Reset (asserted)")?;
-        thread::sleep(Duration::from_millis(10)); // 10ms reset assertion (minimum for STM32)
+        thread::sleep(Duration::from_millis(100)); // 100ms reset assertion
 
         // Deassert reset
         debug!("Deasserting reset (HIGH)");
@@ -572,6 +571,8 @@ mod tests {
     fn test_gpio_direction_display() {
         assert_eq!(GpioDirection::Input.to_string(), "in");
         assert_eq!(GpioDirection::Output.to_string(), "out");
+        assert_eq!(GpioDirection::OutputLow.to_string(), "low");
+        assert_eq!(GpioDirection::OutputHigh.to_string(), "high");
     }
 
     #[test]
