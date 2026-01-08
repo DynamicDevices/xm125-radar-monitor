@@ -1,5 +1,5 @@
 (function() {
-    var implementors = Object.fromEntries([["xm125_radar_monitor",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.91.1/core/ops/drop/trait.Drop.html\" title=\"trait core::ops::drop::Drop\">Drop</a> for <a class=\"struct\" href=\"xm125_radar_monitor/gpio/struct.XM125GpioController.html\" title=\"struct xm125_radar_monitor::gpio::XM125GpioController\">XM125GpioController</a>"]]]]);
+    var implementors = Object.fromEntries([["xm125_radar_monitor",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.92.0/core/ops/drop/trait.Drop.html\" title=\"trait core::ops::drop::Drop\">Drop</a> for <a class=\"struct\" href=\"xm125_radar_monitor/gpio/struct.XM125GpioController.html\" title=\"struct xm125_radar_monitor::gpio::XM125GpioController\">XM125GpioController</a>"]]]]);
     if (window.register_implementors) {
         window.register_implementors(implementors);
     } else {
