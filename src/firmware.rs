@@ -193,11 +193,13 @@ impl FirmwareManager {
 
         // Use stm32flash to program the firmware via I2C
         // Note: -g flag should make device jump to application, but we'll still do explicit reset
+        // -R flag forces a reset of the radar module after programming
         let output = Command::new("stm32flash")
             .args([
                 "-w",
                 binary_path, // Write binary file
                 "-v",        // Verify after write
+                "-R",        // Force reset after programming
                 "-g",
                 "0x08000000", // Jump to application after flashing
                 "-a",
