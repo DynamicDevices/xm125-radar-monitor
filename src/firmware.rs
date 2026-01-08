@@ -192,16 +192,17 @@ impl FirmwareManager {
         info!("Flashing firmware: {binary_path}");
 
         // Use stm32flash to program the firmware via I2C
-        // Note: -g flag should make device jump to application, but we'll still do explicit reset
-        // -R flag forces a reset of the radar module after programming
+        // Note: We do NOT use -R flag because software reset doesn't properly sample BOOT0 pin
+        // Instead, we set BOOT0 LOW and perform hardware reset via GPIO after programming
+        // -g flag jumps to application address, but device will still be in bootloader mode
+        // until we do a hardware reset with BOOT0 LOW
         let output = Command::new("stm32flash")
             .args([
                 "-w",
                 binary_path, // Write binary file
                 "-v",        // Verify after write
-                "-R",        // Force reset after programming
                 "-g",
-                "0x08000000", // Jump to application after flashing
+                "0x08000000", // Jump to application after flashing (doesn't exit bootloader)
                 "-a",
                 "0x48",       // I2C bus address (bootloader mode)
                 "/dev/i2c-2", // I2C device
@@ -229,7 +230,11 @@ impl FirmwareManager {
             warn!("Firmware flashing may not have completed properly");
         }
 
-        // Give the device a moment to process the jump command
+        // Important: Do NOT rely on stm32flash -R flag for reset
+        // Software reset via -R doesn't properly sample BOOT0 pin state
+        // Device will remain in bootloader mode if BOOT0 is HIGH during software reset
+        // Instead, we will set BOOT0 LOW and perform hardware reset via GPIO in reset_to_run_mode()
+        // Give the device a moment to complete flash operations before resetting
         std::thread::sleep(std::time::Duration::from_millis(500));
 
         Ok(())
