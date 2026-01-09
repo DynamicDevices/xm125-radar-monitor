@@ -192,17 +192,30 @@ impl FirmwareManager {
         info!("Flashing firmware: {binary_path}");
 
         // Use stm32flash to program the firmware via I2C
-        // Note: We do NOT use -R flag because software reset doesn't properly sample BOOT0 pin
-        // Instead, we set BOOT0 LOW and perform hardware reset via GPIO after programming
-        // -g flag jumps to application address, but device will still be in bootloader mode
-        // until we do a hardware reset with BOOT0 LOW
+        // -R flag performs software reset after programming
+        //
+        // IMPORTANT: The -R flag forces a software reset which triggers OBL_LAUNCH
+        // (Option Byte Loading Launch) in the STM32. This causes the STM32 to:
+        // 1. Reload option bytes from flash (including the "empty flash" flag)
+        // 2. Clear the "empty flash" flag if flash has been programmed
+        // 3. Perform a system reset
+        //
+        // The "empty flash" flag is a hardware flag that forces bootloader mode
+        // even when BOOT0 is LOW. This flag is set when flash is erased and cleared
+        // by either:
+        // - Power-On Reset (POR) - full power cycle
+        // - OBL_LAUNCH - triggered by software reset via -R flag
+        // - Writing option bytes via bootloader protocol (complex, not implemented)
+        //
+        // Note: Software reset via -R may not properly sample BOOT0 pin state during
+        // the reset sequence, so we still perform hardware reset via GPIO after this
+        // to ensure BOOT0 is sampled correctly for proper boot mode selection.
         let output = Command::new("stm32flash")
             .args([
                 "-w",
                 binary_path, // Write binary file
                 "-v",        // Verify after write
-                "-g",
-                "0x08000000", // Jump to application after flashing (doesn't exit bootloader)
+                "-R", // Reset device after programming (software reset - triggers OBL_LAUNCH)
                 "-a",
                 "0x48",       // I2C bus address (bootloader mode)
                 "/dev/i2c-2", // I2C device
@@ -230,11 +243,15 @@ impl FirmwareManager {
             warn!("Firmware flashing may not have completed properly");
         }
 
-        // Important: Do NOT rely on stm32flash -R flag for reset
-        // Software reset via -R doesn't properly sample BOOT0 pin state
-        // Device will remain in bootloader mode if BOOT0 is HIGH during software reset
-        // Instead, we will set BOOT0 LOW and perform hardware reset via GPIO in reset_to_run_mode()
-        // Give the device a moment to complete flash operations before resetting
+        // The -R flag has triggered OBL_LAUNCH which reloads option bytes and clears
+        // the "empty flash" flag. However, software reset may not properly sample BOOT0 pin,
+        // so we still perform hardware reset via GPIO in reset_to_run_mode() to ensure:
+        // 1. BOOT0 pin is properly sampled (must be LOW for application boot)
+        // 2. Full power-on reset sequence is performed
+        // 3. Device reliably exits bootloader mode and enters run mode
+        //
+        // Give the device a moment to complete flash operations and option byte reload
+        // before performing hardware reset
         std::thread::sleep(std::time::Duration::from_millis(500));
 
         Ok(())
