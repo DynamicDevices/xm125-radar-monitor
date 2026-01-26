@@ -1,8 +1,8 @@
 // FIFO Writer Implementation
 // Based on spi-lib pattern: open-write-close with O_NONBLOCK
 
-use libc::{O_NONBLOCK, O_WRONLY};
-use log::debug;
+use libc::{EEXIST, O_NONBLOCK, O_WRONLY};
+use log::{debug, error, info};
 use std::ffi::CString;
 use std::time::Instant;
 
@@ -19,10 +19,23 @@ impl FifoWriter {
 
         // Create FIFO if it doesn't exist (same as spi-lib)
         unsafe {
-            libc::mkfifo(path_cstring.as_ptr(), 0o666);
+            let result = libc::mkfifo(path_cstring.as_ptr(), 0o666);
+            if result != 0 {
+                let errno = std::io::Error::last_os_error();
+                // EEXIST is OK - FIFO already exists (created by tmpfiles.d or previous run)
+                if errno.raw_os_error() == Some(EEXIST) {
+                    debug!("FIFO already exists at: {path} (interval: {interval_secs:.1}s)");
+                } else {
+                    error!(
+                        "Failed to create FIFO at {path}: {errno} (errno: {:?})",
+                        errno.raw_os_error()
+                    );
+                    return Err(errno);
+                }
+            } else {
+                info!("FIFO created successfully at: {path} (interval: {interval_secs:.1}s)");
+            }
         }
-
-        debug!("FIFO created/verified at: {path} (interval: {interval_secs:.1}s)");
 
         Ok(Self {
             path: path_cstring,
